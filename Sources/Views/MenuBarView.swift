@@ -142,6 +142,8 @@ public struct MenuBarView: View {
             } label: {
                 HStack(spacing: 5) {
                     BrandLogoView(.gemini, size: 13)
+                        .frame(width: 13, height: 13)
+                        .fixedSize()
 
                     Text(viewModel.selectedAccount?.email.isEmpty ?? true ? (viewModel.selectedAccount?.name ?? "Account") : (viewModel.selectedAccount?.email ?? ""))
                         .font(.system(size: 11, weight: .semibold))
