@@ -6,6 +6,7 @@ import Combine
 public final class DashboardViewModel: ObservableObject {
     @Published public var accounts: [Account] = []
     @Published public var selectedAccountId: UUID? = nil
+    @Published public var currentTime: Date = Date()
     @Published public var isLoading: Bool = false
     @Published public var errorMessage: String? = nil
     @Published public var recommendation: BudgetRecommendation? = nil
@@ -14,18 +15,70 @@ public final class DashboardViewModel: ObservableObject {
     private let keychainManager = KeychainManager.shared
     private let notificationManager = NotificationManager.shared
     private let budgetAdvisor = SmartBudgetAdvisor.shared
-    private let accountsStorageKey = "com.antibox.saved_accounts_v2"
+    private let syncService = LocalProxySyncService.shared
+    private let accountsStorageKey = "com.antibox.saved_accounts_v3"
+
+    private var secondTimer: AnyCancellable?
+    private var syncTimer: AnyCancellable?
 
     public init() {
         notificationManager.requestAuthorization()
-        loadPersistedAccounts()
-        if accounts.isEmpty {
-            seedRealWorldAccounts()
-        }
-        if selectedAccountId == nil {
-            selectedAccountId = accounts.first?.id
+        loadInitialData()
+        startRealtimeTickers()
+    }
+
+    deinit {
+        secondTimer?.cancel()
+        syncTimer?.cancel()
+    }
+
+    private func loadInitialData() {
+        if syncService.isAvailable, let localSync = syncService.syncFromLocalStore() {
+            self.accounts = localSync.accounts
+            if let activeId = localSync.currentAccountId {
+                self.selectedAccountId = activeId
+            } else {
+                self.selectedAccountId = accounts.first?.id
+            }
+        } else {
+            loadPersistedAccounts()
+            if accounts.isEmpty {
+                seedRealWorldAccounts()
+            }
+            if selectedAccountId == nil {
+                selectedAccountId = accounts.first?.id
+            }
         }
         recalculateBudget()
+    }
+
+    private func startRealtimeTickers() {
+        // Live 1-second countdown clock ticker
+        secondTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] now in
+                self?.currentTime = now
+            }
+
+        // Live 5-second store synchronizer to catch quota changes in background proxy
+        syncTimer = Timer.publish(every: 5.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.performBackgroundSync()
+            }
+    }
+
+    private func performBackgroundSync() {
+        guard syncService.isAvailable, let localSync = syncService.syncFromLocalStore() else {
+            return
+        }
+
+        // Update accounts with live data
+        self.accounts = localSync.accounts
+        if self.selectedAccountId == nil, let activeId = localSync.currentAccountId {
+            self.selectedAccountId = activeId
+        }
+        self.recalculateBudget()
     }
 
     /// Currently active account for focused model quota inspection
@@ -41,7 +94,6 @@ public final class DashboardViewModel: ObservableObject {
         if let account = selectedAccount, !account.quotas.isEmpty {
             return account.quotas
         }
-        // Fallback: collect all quotas across accounts
         return accounts.flatMap { $0.quotas }
     }
 
@@ -51,13 +103,11 @@ public final class DashboardViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // Simulate lightweight refresh with real timestamps
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        try? await Task.sleep(nanoseconds: 200_000_000)
 
-        for index in accounts.indices {
-            let account = accounts[index]
-            guard account.isActive else { continue }
+        performBackgroundSync()
 
+        for account in accounts where account.isActive {
             notificationManager.evaluateQuotaThreshold(for: account)
         }
 
@@ -155,119 +205,34 @@ public final class DashboardViewModel: ObservableObject {
         self.recommendation = budgetAdvisor.calculateRecommendation(accounts: accounts)
     }
 
-    // MARK: - Real-World Dataset Setup (Matched with User's Dashboard)
+    // MARK: - Fallback Seed Data
 
     private func seedRealWorldAccounts() {
         let calendar = Calendar.current
         let now = Date()
 
-        // 4 hours 59 minutes from now
         let geminiResetDate = calendar.date(byAdding: .minute, value: 299, to: now) ?? now.addingTimeInterval(17940)
-
-        // 2 days 16 hours from now
         let claudeWeeklyResetDate = calendar.date(byAdding: .minute, value: (2 * 1440) + (16 * 60), to: now) ?? now.addingTimeInterval(230400)
 
-        // 6 days 12 hours from now
-        let claudeFullResetDate = calendar.date(byAdding: .minute, value: (6 * 1440) + (12 * 60), to: now) ?? now.addingTimeInterval(561600)
-
-        // Account 1: Current Active Account (tunefix.id@gmail.com)
         let primaryAccount = Account(
-            name: "Current Account",
+            name: "Tune Fix",
             email: "tunefix.id@gmail.com",
             provider: .gemini,
             tier: "PRO",
             totalQuotaTokens: 10_000_000,
-            usedQuotaTokens: 2_700_000, // 73% remaining
+            usedQuotaTokens: 2_700_000,
             resetDate: geminiResetDate,
             isActive: true,
             quotas: [
-                QuotaItem(
-                    name: "gemini-3.1-pro-high",
-                    provider: .gemini,
-                    iconKind: .sparkle,
-                    remainingPercentage: 73.0,
-                    resetDate: geminiResetDate,
-                    remainingTokens: 7_300_000,
-                    totalTokens: 10_000_000
-                ),
-                QuotaItem(
-                    name: "gemini-3.1-flash-image",
-                    provider: .gemini,
-                    iconKind: .sparkle,
-                    remainingPercentage: 73.0,
-                    resetDate: geminiResetDate,
-                    remainingTokens: 7_300_000,
-                    totalTokens: 10_000_000
-                ),
-                QuotaItem(
-                    name: "gemini-3-flash-agent",
-                    provider: .gemini,
-                    iconKind: .sparkle,
-                    remainingPercentage: 73.0,
-                    resetDate: geminiResetDate,
-                    remainingTokens: 7_300_000,
-                    totalTokens: 10_000_000
-                ),
-                QuotaItem(
-                    name: "claude-sonnet-4-6",
-                    provider: .claude,
-                    iconKind: .sunburst,
-                    remainingPercentage: 0.0,
-                    customLabel: "Weekly 0%",
-                    resetDate: claudeWeeklyResetDate,
-                    remainingTokens: 0,
-                    totalTokens: 5_000_000
-                )
+                QuotaItem(name: "Gemini 3.8 Flash (Medium)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 73.0, resetDate: geminiResetDate),
+                QuotaItem(name: "Gemini 3.1 Flash Lite", provider: .gemini, iconKind: .robot, remainingPercentage: 73.0, resetDate: geminiResetDate),
+                QuotaItem(name: "Gemini 3.1 Pro (High)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 73.0, resetDate: geminiResetDate),
+                QuotaItem(name: "Claude Opus 4.6 (Thinking)", provider: .claude, iconKind: .sunburst, remainingPercentage: 0.0, customLabel: "Weekly 0%", resetDate: claudeWeeklyResetDate),
+                QuotaItem(name: "Claude Sonnet 4.6 (Thinking)", provider: .claude, iconKind: .sunburst, remainingPercentage: 0.0, customLabel: "Weekly 0%", resetDate: claudeWeeklyResetDate)
             ]
         )
 
-        // Account 2: xtampol@gmail.com (High-capacity Gemini pool with full 100% quota)
-        let xtampolAccount = Account(
-            name: "Best Gemini Pool",
-            email: "xtampol@gmail.com",
-            provider: .gemini,
-            tier: "SCALE",
-            totalQuotaTokens: 25_000_000,
-            usedQuotaTokens: 0,
-            resetDate: geminiResetDate,
-            isActive: true,
-            quotas: [
-                QuotaItem(name: "Gemini 3.8 Flash (High)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Flash Preview (Flash...)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.7 Flash (High)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.7 Flash (Low)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.6 Flash (Med)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.5 Flash (Low)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.5 Flash Lite", provider: .gemini, iconKind: .robot, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.1 Pro (Low)", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.1 Flash Lite", provider: .gemini, iconKind: .robot, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3 Flash", provider: .gemini, iconKind: .robot, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Gemini 3.5 Flash Lite", provider: .gemini, iconKind: .sparkle, remainingPercentage: 100.0, resetDate: geminiResetDate),
-                QuotaItem(name: "Claude Sonnet", provider: .claude, iconKind: .sunburst, remainingPercentage: 0.0, customLabel: "Weekly 0%", resetDate: claudeWeeklyResetDate)
-            ]
-        )
-
-        // Account 3: yraunajfni@gmail.com (Claude backup pool)
-        let yraunajfniAccount = Account(
-            name: "Claude Standby",
-            email: "yraunajfni@gmail.com",
-            provider: .claude,
-            tier: "PRO",
-            totalQuotaTokens: 10_000_000,
-            usedQuotaTokens: 0,
-            resetDate: claudeFullResetDate,
-            isActive: true,
-            quotas: [
-                QuotaItem(name: "Claude 3.5 Sonnet", provider: .claude, iconKind: .sunburst, remainingPercentage: 100.0, resetDate: claudeFullResetDate)
-            ]
-        )
-
-        accounts = [primaryAccount, xtampolAccount, yraunajfniAccount]
+        accounts = [primaryAccount]
         saveAccounts()
-
-        // Seed mock keychain entries
-        _ = try? keychainManager.save(token: "sk-gemini-tunefix-sample", forAccount: primaryAccount.id)
-        _ = try? keychainManager.save(token: "sk-gemini-xtampol-sample", forAccount: xtampolAccount.id)
-        _ = try? keychainManager.save(token: "sk-claude-yraunajfni-sample", forAccount: yraunajfniAccount.id)
     }
 }

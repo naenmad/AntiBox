@@ -14,17 +14,17 @@ public struct MenuBarView: View {
             headerView
 
             Divider()
-                .opacity(0.3)
+                .opacity(0.12)
 
             // Content Area
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 10) {
+                VStack(spacing: 9) {
                     // Smart Advisor Compact Banner
                     if let recommendation = viewModel.recommendation {
                         BudgetAdvisorCardView(recommendation: recommendation)
                     }
 
-                    // Account Selector / Active Context
+                    // Account Selector Capsule Bar
                     if !viewModel.accounts.isEmpty {
                         accountSwitcherBar
                     }
@@ -37,13 +37,18 @@ public struct MenuBarView: View {
             }
 
             Divider()
-                .opacity(0.3)
+                .opacity(0.12)
 
             // Footer
             footerView
         }
         .frame(width: 360, height: 490)
         .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
+        )
         .sheet(isPresented: $viewModel.showingAddAccountSheet) {
             AddAccountSheet { name, provider, tier, total, used, resetDate, apiKey in
                 viewModel.addAccount(
@@ -63,17 +68,17 @@ public struct MenuBarView: View {
 
     private var headerView: some View {
         HStack(spacing: 8) {
-            // App Branding
+            // App Branding with live status dot
             HStack(spacing: 6) {
-                Image(systemName: "gauge.with.dots.needle.33percent")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Color(red: 0.22, green: 0.88, blue: 0.62))
+                Circle()
+                    .fill(Color(red: 0.22, green: 0.88, blue: 0.62))
+                    .frame(width: 7, height: 7)
 
                 Text("AntiBox")
                     .font(.system(size: 13, weight: .bold))
 
                 Text("Quota Monitor")
-                    .font(.system(size: 11))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundColor(.secondary)
             }
 
@@ -91,7 +96,7 @@ public struct MenuBarView: View {
                         .frame(width: 16, height: 16)
                 } else {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
@@ -105,7 +110,7 @@ public struct MenuBarView: View {
                 viewModel.showingAddAccountSheet = true
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
@@ -113,7 +118,7 @@ public struct MenuBarView: View {
             .keyboardShortcut("n", modifiers: [.command])
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.vertical, 10)
     }
 
     private var accountSwitcherBar: some View {
@@ -157,7 +162,7 @@ public struct MenuBarView: View {
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.vertical, 3.5)
                 .background(Color.primary.opacity(0.04))
                 .clipShape(Capsule())
             }
@@ -174,7 +179,7 @@ public struct MenuBarView: View {
     private var quotaListView: some View {
         VStack(spacing: 5) {
             ForEach(viewModel.currentQuotaItems) { item in
-                ModelQuotaRowView(item: item)
+                ModelQuotaRowView(item: item, currentTime: viewModel.currentTime)
             }
         }
     }
@@ -182,11 +187,7 @@ public struct MenuBarView: View {
     private var footerView: some View {
         HStack {
             HStack(spacing: 4) {
-                Circle()
-                    .fill(Color(red: 0.22, green: 0.88, blue: 0.62))
-                    .frame(width: 5, height: 5)
-
-                Text("\(viewModel.accounts.count) accounts configured")
+                Text("\(viewModel.accounts.count) accounts active")
                     .font(.system(size: 10.5))
                     .foregroundColor(.secondary)
             }

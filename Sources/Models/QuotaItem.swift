@@ -65,8 +65,7 @@ public struct QuotaItem: Identifiable, Codable, Hashable, Sendable {
         }
     }
 
-    public var countdownString: String {
-        let now = Date()
+    public func countdownString(at now: Date = Date()) -> String {
         guard resetDate > now else { return "0m" }
         let diff = Calendar.current.dateComponents([.day, .hour, .minute], from: now, to: resetDate)
         let days = diff.day ?? 0
@@ -80,6 +79,10 @@ public struct QuotaItem: Identifiable, Codable, Hashable, Sendable {
         } else {
             return "\(max(1, minutes))m"
         }
+    }
+
+    public var countdownString: String {
+        countdownString(at: Date())
     }
 
     public var displayPercentageString: String {

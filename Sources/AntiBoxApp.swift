@@ -47,6 +47,10 @@ struct AntiBoxApp: App {
     }
 
     private var lowestAccountPercentage: Double? {
+        let items = dashboardViewModel.currentQuotaItems
+        if !items.isEmpty {
+            return items.map { $0.remainingPercentage }.min()
+        }
         let active = dashboardViewModel.accounts.filter { $0.isActive }
         guard !active.isEmpty else { return nil }
         return active.map { $0.remainingPercentage }.min()
