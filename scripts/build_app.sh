@@ -21,9 +21,18 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR"
 
-echo "==> Copying executable and Info.plist..."
+echo "==> Copying executable, Info.plist, and AppIcon..."
 cp "$BIN_PATH" "$MACOS_DIR/AntiBox"
 cp "$PROJECT_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
+if [ -f "$PROJECT_DIR/Assets/AppIcon.icns" ]; then
+    cp "$PROJECT_DIR/Assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+fi
 
 echo "==> AntiBox.app built successfully at: $APP_DIR"
-echo "==> To launch AntiBox, run: open AntiBox.app"
+
+if [ "$1" == "--install" ] || [ "$1" == "-i" ]; then
+    echo "==> Installing to /Applications..."
+    rm -rf "/Applications/AntiBox.app"
+    cp -R "$APP_DIR" "/Applications/AntiBox.app"
+    echo "==> AntiBox.app successfully installed to /Applications/AntiBox.app!"
+fi
