@@ -85,7 +85,7 @@ public final class AntiBoxAccountStore: Sendable {
 
             // Save refresh token securely in Keychain for direct standalone usage
             if !refreshToken.isEmpty {
-                try? keychain.save(token: refreshToken, forAccount: uuid)
+                _ = try? keychain.save(token: refreshToken, forAccount: uuid)
             }
 
             let newAccount = Account(

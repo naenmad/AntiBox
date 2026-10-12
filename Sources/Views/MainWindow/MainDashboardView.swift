@@ -94,17 +94,7 @@ public struct MainDashboardView: View {
             }
         }
         .sheet(isPresented: $viewModel.showingAddAccountSheet) {
-            AddAccountSheet { name, provider, tier, total, used, resetDate, apiKey in
-                viewModel.addAccount(
-                    name: name,
-                    provider: provider,
-                    tier: tier,
-                    totalTokens: total,
-                    usedTokens: used,
-                    resetDate: resetDate,
-                    apiKey: apiKey
-                )
-            }
+            AddAccountSheet(viewModel: viewModel)
         }
     }
 

@@ -1,88 +1,173 @@
 import SwiftUI
 
-/// Modal sheet for adding a new AI provider account and saving credentials to Keychain
+/// Clean, native modal sheet for connecting an Antigravity account via Google OAuth login popup
 public struct AddAccountSheet: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    @ObservedObject private var oauthManager = OAuthSignInManager.shared
     @Environment(\.dismiss) private var dismiss
 
-    @State private var name: String = ""
-    @State private var provider: AIProvider = .gemini
-    @State private var tier: String = "Pro"
-    @State private var totalTokensString: String = "10000000"
-    @State private var usedTokensString: String = "2000000"
-    @State private var resetDate: Date = Calendar.current.date(byAdding: .day, value: 14, to: Date()) ?? Date()
-    @State private var apiKey: String = ""
+    @State private var showingManualInput: Bool = false
+    @State private var manualRefreshToken: String = ""
 
-    public let onSave: (String, AIProvider, String, Int64, Int64, Date, String) -> Void
-
-    public init(onSave: @escaping (String, AIProvider, String, Int64, Int64, Date, String) -> Void) {
-        self.onSave = onSave
-    }
-
-    private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (Int64(totalTokensString) ?? 0) > 0
+    public init(viewModel: DashboardViewModel) {
+        self.viewModel = viewModel
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header
+        VStack(spacing: 20) {
+            // Header Bar
             HStack {
-                Text("Add Monitored Account")
-                    .font(.system(size: 15, weight: .semibold))
+                Text("Connect Antigravity Account")
+                    .font(.system(size: 15, weight: .bold))
 
                 Spacer()
 
-                Button("Cancel") {
+                Button {
                     dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
                 }
+                .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
             }
 
-            Divider()
+            // Visual Hero Banner
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.cyan.opacity(0.12))
+                        .frame(width: 54, height: 54)
 
-            // Form Fields
-            Form {
-                Picker("Provider", selection: $provider) {
-                    ForEach(AIProvider.allCases) { item in
-                        Label(item.displayName, systemImage: item.iconName).tag(item)
-                    }
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundColor(.cyan)
                 }
-                .pickerStyle(.segmented)
 
-                TextField("Account Label", text: $name, prompt: Text("e.g. Production Backend"))
+                VStack(spacing: 4) {
+                    Text("Sign in with Google")
+                        .font(.system(size: 14, weight: .semibold))
 
-                TextField("Plan Tier", text: $tier, prompt: Text("e.g. Pro or Pay-as-you-go"))
+                    Text("Authorize AntiBox directly to monitor your live Gemini & Claude weekly pools, cycle resets, and image tokens.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
+                }
+            }
+            .padding(.vertical, 6)
 
-                TextField("Total Token Quota", text: $totalTokensString)
-                    .help("Total allowed tokens per billing cycle")
+            // Primary Action: Google OAuth Login Popup
+            VStack(spacing: 10) {
+                Button {
+                    Task {
+                        await viewModel.connectAntigravityAccountViaOAuth()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if oauthManager.isAuthenticating {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 16, height: 16)
+                            Text(oauthManager.statusMessage.isEmpty ? "Connecting..." : oauthManager.statusMessage)
+                                .font(.system(size: 13, weight: .medium))
+                        } else {
+                            Image(systemName: "arrow.up.right.square.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                            Text("Log in with Google (Popup)")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 9)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .disabled(oauthManager.isAuthenticating)
 
-                TextField("Used Tokens", text: $usedTokensString)
-                    .help("Tokens consumed in current cycle")
-
-                DatePicker("Billing Reset Date", selection: $resetDate, displayedComponents: [.date])
-
-                SecureField("API Key / Session Token", text: $apiKey, prompt: Text("Stored securely in macOS Keychain"))
-                    .help("Credentials are saved in Apple Keychain Services and never logged")
+                if let error = oauthManager.errorMessage {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundColor(.red)
+                }
             }
 
-            Divider()
-
-            // Actions
-            HStack {
-                Spacer()
-
-                Button("Add Account") {
-                    let total = Int64(totalTokensString) ?? 10_000_000
-                    let used = Int64(usedTokensString) ?? 0
-                    onSave(name, provider, tier, total, used, resetDate, apiKey)
-                    dismiss()
+            // Optional Manual Refresh Token Fallback
+            VStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showingManualInput.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(showingManualInput ? "Hide manual input" : "Or enter refresh token manually")
+                            .font(.system(size: 11))
+                        Image(systemName: showingManualInput ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9))
+                    }
+                    .foregroundColor(.secondary)
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .disabled(!isValid)
+                .buttonStyle(.plain)
+
+                if showingManualInput {
+                    VStack(spacing: 8) {
+                        SecureField("Google OAuth Refresh Token (1//...)", text: $manualRefreshToken)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11))
+
+                        Button("Connect with Token") {
+                            addManualToken()
+                        }
+                        .buttonStyle(.bordered)
+                        .font(.system(size: 11))
+                        .disabled(manualRefreshToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding(10)
+                    .background(Color.primary.opacity(0.03))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
             }
         }
-        .padding(16)
-        .frame(width: 420)
+        .padding(20)
+        .frame(width: 380)
+        .background(VisualEffectView(material: .sheet, blendingMode: .behindWindow))
+    }
+
+    private func addManualToken() {
+        let token = manualRefreshToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return }
+
+        Task {
+            if let accessToken = try? await DirectCloudCodeEngine.shared.refreshAccessToken(refreshToken: token) {
+                let id = UUID()
+                _ = try? KeychainManager.shared.save(token: token, forAccount: id)
+
+                var account = Account(
+                    id: id,
+                    name: "Antigravity Account",
+                    email: "antigravity.user@gmail.com",
+                    provider: .gemini,
+                    tier: "PRO",
+                    totalQuotaTokens: 10_000_000,
+                    usedQuotaTokens: 2_700_000,
+                    resetDate: Date().addingTimeInterval(17940),
+                    isActive: true
+                )
+
+                if let directRes = try? await DirectCloudCodeEngine.shared.fetchDirectQuotas(accessToken: accessToken) {
+                    account.customRemainingPercentage = directRes.geminiWeeklyPercentage
+                    account.resetDate = directRes.geminiResetDate
+                    account.imageQuotaPercentage = directRes.imageQuotaPercentage
+                    account.imageQuotaResetDate = directRes.imageQuotaResetDate
+                    account.quotas = directRes.models
+                }
+
+                viewModel.accounts.append(account)
+                viewModel.selectedAccountId = id
+                viewModel.showingAddAccountSheet = false
+                dismiss()
+            }
+        }
     }
 }

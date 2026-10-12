@@ -277,6 +277,58 @@ public final class DashboardViewModel: ObservableObject {
         selectedAccountId = id
     }
 
+    /// Connects a new Antigravity account directly via native Google OAuth login popup
+    public func connectAntigravityAccountViaOAuth() async {
+        do {
+            let result = try await OAuthSignInManager.shared.startAntigravitySignIn()
+
+            let existingIdx = accounts.firstIndex(where: { $0.email.lowercased() == result.email.lowercased() })
+            let accountId = existingIdx != nil ? accounts[existingIdx!].id : UUID()
+
+            // Save refresh token securely in private credentials vault
+            if !result.refreshToken.isEmpty {
+                _ = try? keychainManager.save(token: result.refreshToken, forAccount: accountId)
+            }
+
+            var newAccount = Account(
+                id: accountId,
+                name: result.name,
+                email: result.email,
+                provider: .gemini,
+                tier: "PRO",
+                totalQuotaTokens: 10_000_000,
+                usedQuotaTokens: 2_700_000,
+                resetDate: Date().addingTimeInterval(17940),
+                isActive: true
+            )
+
+            // Immediately query live quotas via Google Cloud Code API
+            if let directResult = try? await directEngine.fetchDirectQuotas(accessToken: result.accessToken) {
+                newAccount.customRemainingPercentage = directResult.geminiWeeklyPercentage
+                newAccount.resetDate = directResult.geminiResetDate
+                newAccount.imageQuotaPercentage = directResult.imageQuotaPercentage
+                newAccount.imageQuotaResetDate = directResult.imageQuotaResetDate
+                if let imgDate = directResult.imageQuotaResetDate {
+                    newAccount.imageQuotaCountdown = Account.formatCountdown(from: imgDate, at: currentTime)
+                }
+                newAccount.quotas = directResult.models
+            }
+
+            if let idx = existingIdx {
+                accounts[idx] = newAccount
+            } else {
+                accounts.append(newAccount)
+            }
+
+            selectedAccountId = accountId
+            saveAccounts()
+            recalculateBudget()
+            showingAddAccountSheet = false
+        } catch {
+            print("[AntiBox] OAuth connect failed: \(error)")
+        }
+    }
+
     public func addAccount(
         name: String,
         email: String = "",

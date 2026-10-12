@@ -49,17 +49,7 @@ public struct MenuBarView: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
         )
         .sheet(isPresented: $viewModel.showingAddAccountSheet) {
-            AddAccountSheet { name, provider, tier, total, used, resetDate, apiKey in
-                viewModel.addAccount(
-                    name: name,
-                    provider: provider,
-                    tier: tier,
-                    totalTokens: total,
-                    usedTokens: used,
-                    resetDate: resetDate,
-                    apiKey: apiKey
-                )
-            }
+            AddAccountSheet(viewModel: viewModel)
         }
     }
 
