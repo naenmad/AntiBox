@@ -16,6 +16,15 @@ public final class DashboardViewModel: ObservableObject {
     private let notificationManager = NotificationManager.shared
     private let budgetAdvisor = SmartBudgetAdvisor.shared
     private let syncService = LocalProxySyncService.shared
+    public enum EngineMode: String, CaseIterable, Identifiable {
+        case hybrid = "Hybrid (Auto)"
+        case direct = "Direct API"
+        case localStore = "Local Store"
+        public var id: String { rawValue }
+    }
+
+    @Published public var engineMode: EngineMode = .hybrid
+    private let independentEngine = IndependentQuotaEngine.shared
     private let accountsStorageKey = "com.antibox.saved_accounts_v3"
 
     private var secondTimer: AnyCancellable?
@@ -105,7 +114,25 @@ public final class DashboardViewModel: ObservableObject {
 
         try? await Task.sleep(nanoseconds: 200_000_000)
 
-        performBackgroundSync()
+        if engineMode == .direct {
+            for index in accounts.indices {
+                let acc = accounts[index]
+                guard acc.isActive else { continue }
+                if let key = try? keychainManager.retrieve(forAccount: acc.id), !key.isEmpty {
+                    if acc.provider == .gemini {
+                        if let live = try? await independentEngine.fetchGeminiDirectQuota(apiKey: key) {
+                            accounts[index].quotas = live
+                        }
+                    } else {
+                        if let live = try? await independentEngine.fetchClaudeDirectQuota(apiKey: key) {
+                            accounts[index].quotas = live
+                        }
+                    }
+                }
+            }
+        } else {
+            performBackgroundSync()
+        }
 
         for account in accounts where account.isActive {
             notificationManager.evaluateQuotaThreshold(for: account)
