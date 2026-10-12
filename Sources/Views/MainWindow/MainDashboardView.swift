@@ -163,8 +163,25 @@ public struct MainDashboardView: View {
                 HStack(alignment: .top, spacing: 14) {
                     ForEach(viewModel.currentQuotaGroups) { group in
                         VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                BrandLogoView(group.id == "gemini" ? .gemini : .claudeAndGpt, size: 20)
+                            HStack(spacing: 8) {
+                                if group.id == "gemini" {
+                                    BrandLogoView(.gemini, size: 16)
+                                        .frame(width: 26, height: 26)
+                                        .background(group.accentColor.opacity(0.12))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                } else {
+                                    HStack(spacing: 4) {
+                                        BrandLogoView(.claude, size: 14)
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.orange.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                                        BrandLogoView(.chatgpt, size: 14)
+                                            .frame(width: 24, height: 24)
+                                            .background(Color.teal.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    }
+                                }
 
                                 Text(group.title)
                                     .font(.system(size: 14, weight: .bold))

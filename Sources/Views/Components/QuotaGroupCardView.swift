@@ -28,11 +28,25 @@ public struct QuotaGroupCardView: View {
         VStack(alignment: .leading, spacing: 9) {
             // Group Header Row
             HStack(spacing: 8) {
-                // Group Icon
-                BrandLogoView(group.id == "gemini" ? .gemini : .claudeAndGpt, size: 18)
-                    .frame(width: 26, height: 26)
-                    .background(group.accentColor.opacity(0.10))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                // Group Icon Badges
+                if group.id == "gemini" {
+                    BrandLogoView(.gemini, size: 15)
+                        .frame(width: 24, height: 24)
+                        .background(group.accentColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                } else {
+                    HStack(spacing: 3.5) {
+                        BrandLogoView(.claude, size: 12.5)
+                            .frame(width: 20, height: 20)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+                        BrandLogoView(.chatgpt, size: 12.5)
+                            .frame(width: 20, height: 20)
+                            .background(Color.teal.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    }
+                }
 
                 // Group Title
                 Text(group.title)

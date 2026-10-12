@@ -141,7 +141,8 @@ public struct MenuBarView: View {
                 }
             } label: {
                 HStack(spacing: 5) {
-                    BrandLogoView(.gemini, size: 13)
+                    let brand: BrandLogoKind = (viewModel.selectedAccount?.provider == .claude) ? .claude : .gemini
+                    BrandLogoView(brand, size: 13)
                         .frame(width: 13, height: 13)
                         .fixedSize()
 
