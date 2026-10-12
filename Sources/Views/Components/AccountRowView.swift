@@ -20,10 +20,8 @@ public struct AccountRowView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Header Row: Provider Icon, Account Name, Tier, and Status Badge
             HStack(spacing: 8) {
-                Image(systemName: account.provider.iconName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(account.provider.brandColor)
-                    .frame(width: 20, height: 20)
+                BrandLogoView(account.provider == .gemini ? .gemini : .claude, size: 16)
+                    .frame(width: 22, height: 22)
                     .background(account.provider.brandColor.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
 

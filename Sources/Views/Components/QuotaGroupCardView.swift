@@ -29,11 +29,9 @@ public struct QuotaGroupCardView: View {
             // Group Header Row
             HStack(spacing: 8) {
                 // Group Icon
-                Image(systemName: group.iconName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(group.accentColor)
-                    .frame(width: 24, height: 24)
-                    .background(group.accentColor.opacity(0.12))
+                BrandLogoView(group.id == "gemini" ? .gemini : .claudeAndGpt, size: 18)
+                    .frame(width: 26, height: 26)
+                    .background(group.accentColor.opacity(0.10))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 // Group Title

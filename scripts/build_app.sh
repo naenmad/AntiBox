@@ -24,8 +24,8 @@ mkdir -p "$RESOURCES_DIR"
 echo "==> Copying executable, Info.plist, and AppIcon..."
 cp "$BIN_PATH" "$MACOS_DIR/AntiBox"
 cp "$PROJECT_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
-if [ -f "$PROJECT_DIR/Assets/AppIcon.icns" ]; then
-    cp "$PROJECT_DIR/Assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+if [ -d "$PROJECT_DIR/Assets" ]; then
+    cp -R "$PROJECT_DIR/Assets/"* "$RESOURCES_DIR/"
 fi
 
 echo "==> AntiBox.app built successfully at: $APP_DIR"

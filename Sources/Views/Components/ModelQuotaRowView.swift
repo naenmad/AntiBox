@@ -39,24 +39,18 @@ public struct ModelQuotaRowView: View {
                         .foregroundColor(quotaAccentColor)
                 }
 
-                switch item.iconKind {
-                case .sparkle:
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundColor(Color.cyan.opacity(0.9))
-                case .robot:
-                    Image(systemName: "cpu")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundColor(.secondary)
-                case .sunburst:
-                    Image(systemName: "sun.max.fill")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundColor(Color.orange.opacity(0.9))
-                case .chip:
-                    Image(systemName: "bolt.shield.fill")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundColor(Color.cyan)
-                }
+                let brandKind: BrandLogoKind = {
+                    let lower = item.name.lowercased()
+                    if lower.contains("claude") {
+                        return .claude
+                    } else if lower.contains("gpt") {
+                        return .chatgpt
+                    } else {
+                        return .gemini
+                    }
+                }()
+
+                BrandLogoView(brandKind, size: 12)
 
                 Text(item.name)
                     .font(.system(size: 11.5, weight: .medium))

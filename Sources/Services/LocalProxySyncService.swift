@@ -57,6 +57,10 @@ public final class LocalProxySyncService: Sendable {
             var totalRemainingTokens: Int64 = 0
             var totalCapacityTokens: Int64 = 0
 
+            var gemini5hPct: Double? = nil
+            var geminiWeeklyPct: Double? = nil
+            var claude5hPct: Double? = nil
+            var claudeWeeklyPct: Double? = nil
             var geminiBucketPct: Double = 100.0
             var claudeBucketPct: Double = 100.0
             _ = claudeBucketPct
@@ -74,19 +78,31 @@ public final class LocalProxySyncService: Sendable {
                         let dName = (group["display_name"] as? String) ?? ""
                         if let buckets = group["buckets"] as? [[String: Any]] {
                             for b in buckets {
-                                if (b["window"] as? String) == "weekly" {
-                                    let remFrac = (b["remaining_fraction"] as? Double) ?? 1.0
-                                    let pct = remFrac * 100.0
-                                    if dName.contains("Gemini") || (b["bucket_id"] as? String) == "gemini-weekly" {
-                                        geminiBucketPct = pct
-                                    } else if dName.contains("Claude") || (b["bucket_id"] as? String) == "3p-weekly" {
-                                        claudeBucketPct = pct
+                                let window = (b["window"] as? String) ?? ""
+                                let bucketId = (b["bucket_id"] as? String) ?? ""
+                                let remFrac = (b["remaining_fraction"] as? Double) ?? 1.0
+                                let pct = remFrac * 100.0
+                                let isGemini = dName.contains("Gemini") || bucketId.contains("gemini")
+                                if window == "5h" || bucketId.contains("5h") {
+                                    if isGemini {
+                                        gemini5hPct = pct
+                                    } else {
+                                        claude5hPct = pct
+                                    }
+                                } else if window == "weekly" || bucketId.contains("weekly") {
+                                    if isGemini {
+                                        geminiWeeklyPct = pct
+                                    } else {
+                                        claudeWeeklyPct = pct
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                geminiBucketPct = (gemini5hPct != nil && geminiWeeklyPct != nil) ? min(gemini5hPct!, geminiWeeklyPct!) : (gemini5hPct ?? geminiWeeklyPct ?? 100.0)
+                claudeBucketPct = (claude5hPct != nil && claudeWeeklyPct != nil) ? min(claude5hPct!, claudeWeeklyPct!) : (claude5hPct ?? claudeWeeklyPct ?? 100.0)
 
                 if let modelsArr = quotaObj["models"] as? [[String: Any]] {
                     var seenNames: Set<String> = []

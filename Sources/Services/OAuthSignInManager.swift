@@ -150,8 +150,8 @@ public final class OAuthSignInManager: ObservableObject {
                 </head>
                 <body>
                     <div class="card">
-                        <h2>Login Berhasil!</h2>
-                        <p>Akun Antigravity Anda telah berhasil terhubung ke AntiBox.<br>Anda dapat menutup jendela browser ini.</p>
+                        <h2>Sign-In Successful!</h2>
+                        <p>Your Antigravity account is now connected to AntiBox.<br>You can safely close this browser window.</p>
                     </div>
                 </body>
                 </html>

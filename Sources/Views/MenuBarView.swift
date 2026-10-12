@@ -66,10 +66,40 @@ public struct MenuBarView: View {
                 Text("AntiBox")
                     .font(.system(size: 13, weight: .bold))
 
-                Text("Quota Monitor")
+                Text("Quota")
                     .font(.system(size: 11, weight: .regular))
                     .foregroundColor(.secondary)
             }
+
+            // Quick Menu Bar Metric Selector
+            Menu {
+                ForEach(DashboardViewModel.MenuBarDisplayMode.allCases) { mode in
+                    Button {
+                        viewModel.menuBarDisplayMode = mode
+                    } label: {
+                        HStack {
+                            Text(mode.title)
+                            if viewModel.menuBarDisplayMode == mode {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 3.5) {
+                    Image(systemName: viewModel.menuBarDisplayMode.iconName)
+                        .font(.system(size: 9))
+                    Text(viewModel.menuBarDisplayMode.shortLabel)
+                        .font(.system(size: 9.5, weight: .semibold))
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 5.5)
+                .padding(.vertical, 2.5)
+                .background(Color.primary.opacity(0.06))
+                .clipShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .help("Choose metric shown on macOS top bar")
 
             Spacer()
 
@@ -157,6 +187,11 @@ public struct MenuBarView: View {
                                 }
                             }
                         }
+                    }
+                    Button(role: .destructive) {
+                        viewModel.deleteAccount(id: selected.id)
+                    } label: {
+                        Label("Remove This Account", systemImage: "trash")
                     }
                 }
             } label: {

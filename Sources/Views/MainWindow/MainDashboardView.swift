@@ -23,6 +23,8 @@ public enum MainNavigationTab: String, CaseIterable, Identifiable {
 public struct MainDashboardView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var selectedTab: MainNavigationTab = .overview
+    @State private var accountToDelete: Account? = nil
+    @State private var showingDeleteConfirmation: Bool = false
     @ObservedObject private var launchManager = LaunchAtLoginManager.shared
 
     public init(viewModel: DashboardViewModel) {
@@ -96,6 +98,18 @@ public struct MainDashboardView: View {
         .sheet(isPresented: $viewModel.showingAddAccountSheet) {
             AddAccountSheet(viewModel: viewModel)
         }
+        .confirmationDialog(
+            "Delete Account?",
+            isPresented: $showingDeleteConfirmation,
+            presenting: accountToDelete
+        ) { acc in
+            Button("Delete \(acc.email.isEmpty ? acc.name : acc.email)", role: .destructive) {
+                viewModel.deleteAccount(id: acc.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { acc in
+            Text("Are you sure you want to delete this account? Its tokens and credentials will be permanently removed.")
+        }
     }
 
     // MARK: - Sidebar
@@ -152,9 +166,7 @@ public struct MainDashboardView: View {
                     ForEach(viewModel.currentQuotaGroups) { group in
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Image(systemName: group.iconName)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(group.accentColor)
+                                BrandLogoView(group.id == "gemini" ? .gemini : .claudeAndGpt, size: 20)
 
                                 Text(group.title)
                                     .font(.system(size: 14, weight: .bold))
@@ -341,9 +353,10 @@ public struct MainDashboardView: View {
 
             List(viewModel.accounts) { account in
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(account.status.color)
-                        .frame(width: 8, height: 8)
+                    BrandLogoView(account.provider == .gemini ? .gemini : .claude, size: 18)
+                        .frame(width: 24, height: 24)
+                        .background(account.provider.brandColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
@@ -414,9 +427,33 @@ public struct MainDashboardView: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(account.id == viewModel.selectedAccount?.id)
+
+                    // Delete Account Button
+                    Button(role: .destructive) {
+                        accountToDelete = account
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete this account from AntiBox")
                 }
                 .padding(.vertical, 6)
                 .listRowBackground(Color.white.opacity(0.02))
+                .contextMenu {
+                    Button(account.id == viewModel.selectedAccount?.id ? "Currently Active" : "Set as Active") {
+                        viewModel.selectAccount(id: account.id)
+                    }
+                    Divider()
+                    Button(role: .destructive) {
+                        accountToDelete = account
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Account", systemImage: "trash")
+                    }
+                }
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
@@ -467,6 +504,19 @@ public struct MainDashboardView: View {
                         .font(.system(size: 10.5))
                         .foregroundColor(.secondary)
                 }
+            }
+
+            Section("Menu Bar Display Metric") {
+                Picker("Display in Menu Bar", selection: $viewModel.menuBarDisplayMode) {
+                    ForEach(DashboardViewModel.MenuBarDisplayMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.iconName).tag(mode)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+
+                Text("Choose whether the macOS Menu Bar item shows Gemini Quota, Claude & GPT-OSS Quota, or Gemini Image Quota.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
             }
 
             Section("Quota Monitoring & Image Tracking") {

@@ -106,10 +106,15 @@ public final class DirectCloudCodeEngine: Sendable {
         }
 
         let isoFormatter = ISO8601DateFormatter()
-        var geminiWeeklyPct = 100.0
-        var geminiReset = Date().addingTimeInterval(17940)
-        var tpWeeklyPct = 100.0
-        var tpReset = Date().addingTimeInterval(230400)
+        var gemini5hPct: Double? = nil
+        var gemini5hReset: Date? = nil
+        var geminiWeeklyPct: Double? = nil
+        var geminiWeeklyReset: Date? = nil
+
+        var tp5hPct: Double? = nil
+        var tp5hReset: Date? = nil
+        var tpWeeklyPct: Double? = nil
+        var tpWeeklyReset: Date? = nil
 
         for group in groups {
             let dName = (group["displayName"] as? String) ?? ""
@@ -117,22 +122,62 @@ public final class DirectCloudCodeEngine: Sendable {
                 for b in buckets {
                     let window = (b["window"] as? String) ?? ""
                     let bucketId = (b["bucketId"] as? String) ?? ""
-                    if window == "weekly" {
-                        let remFrac = (b["remainingFraction"] as? Double) ?? 1.0
-                        let pct = remFrac * 100.0
-                        let resetStr = (b["resetTime"] as? String) ?? ""
-                        let rDate = isoFormatter.date(from: resetStr) ?? Date().addingTimeInterval(86400 * 3)
+                    let remFrac = (b["remainingFraction"] as? Double) ?? 1.0
+                    let pct = remFrac * 100.0
+                    let resetStr = (b["resetTime"] as? String) ?? ""
+                    let rDate = isoFormatter.date(from: resetStr) ?? Date().addingTimeInterval(17940)
 
-                        if dName.contains("Gemini") || bucketId == "gemini-weekly" {
+                    let isGemini = dName.contains("Gemini") || bucketId.contains("gemini")
+                    if window == "5h" || bucketId.contains("5h") {
+                        if isGemini {
+                            gemini5hPct = pct
+                            gemini5hReset = rDate
+                        } else {
+                            tp5hPct = pct
+                            tp5hReset = rDate
+                        }
+                    } else if window == "weekly" || bucketId.contains("weekly") {
+                        if isGemini {
                             geminiWeeklyPct = pct
-                            geminiReset = rDate
-                        } else if dName.contains("Claude") || bucketId == "3p-weekly" {
+                            geminiWeeklyReset = rDate
+                        } else {
                             tpWeeklyPct = pct
-                            tpReset = rDate
+                            tpWeeklyReset = rDate
                         }
                     }
                 }
             }
+        }
+
+        // The authoritative active percentage is the active constraining limit (e.g., 5-hour limit when actively burning)
+        let effectiveGeminiPct: Double
+        let effectiveGeminiReset: Date
+        if let g5h = gemini5hPct, let gWk = geminiWeeklyPct {
+            if g5h <= gWk {
+                effectiveGeminiPct = g5h
+                effectiveGeminiReset = gemini5hReset ?? Date().addingTimeInterval(17940)
+            } else {
+                effectiveGeminiPct = gWk
+                effectiveGeminiReset = geminiWeeklyReset ?? Date().addingTimeInterval(86400 * 3)
+            }
+        } else {
+            effectiveGeminiPct = gemini5hPct ?? geminiWeeklyPct ?? 100.0
+            effectiveGeminiReset = gemini5hReset ?? geminiWeeklyReset ?? Date().addingTimeInterval(17940)
+        }
+
+        let effectiveTpPct: Double
+        let effectiveTpReset: Date
+        if let t5h = tp5hPct, let tWk = tpWeeklyPct {
+            if t5h < tWk && t5h < 100.0 {
+                effectiveTpPct = t5h
+                effectiveTpReset = tp5hReset ?? Date().addingTimeInterval(17940)
+            } else {
+                effectiveTpPct = tWk
+                effectiveTpReset = tpWeeklyReset ?? Date().addingTimeInterval(86400 * 3)
+            }
+        } else {
+            effectiveTpPct = tp5hPct ?? tpWeeklyPct ?? 100.0
+            effectiveTpReset = tp5hReset ?? tpWeeklyReset ?? Date().addingTimeInterval(86400 * 3)
         }
 
         // 2. Query fetchAvailableModels for individual model allocations & gemini-3.1-flash-image
@@ -181,10 +226,10 @@ public final class DirectCloudCodeEngine: Sendable {
         }
 
         return DirectQuotaResult(
-            geminiWeeklyPercentage: geminiWeeklyPct,
-            geminiResetDate: geminiReset,
-            thirdPartyWeeklyPercentage: tpWeeklyPct,
-            thirdPartyResetDate: tpReset,
+            geminiWeeklyPercentage: effectiveGeminiPct,
+            geminiResetDate: effectiveGeminiReset,
+            thirdPartyWeeklyPercentage: effectiveTpPct,
+            thirdPartyResetDate: effectiveTpReset,
             imageQuotaPercentage: imagePct,
             imageQuotaResetDate: imageReset,
             models: quotaItems,

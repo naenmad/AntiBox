@@ -33,30 +33,28 @@ public struct AddAccountSheet: View {
                 .keyboardShortcut(.cancelAction)
             }
 
-            // Visual Hero Banner
+            // Visual Hero Banner with Google Gemini brand logo
             VStack(spacing: 12) {
                 ZStack {
                     Circle()
                         .fill(Color.cyan.opacity(0.12))
-                        .frame(width: 54, height: 54)
+                        .frame(width: 56, height: 56)
 
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(.cyan)
+                    BrandLogoView(.gemini, size: 30)
                 }
 
                 VStack(spacing: 4) {
                     Text("Sign in with Google")
                         .font(.system(size: 14, weight: .semibold))
 
-                    Text("Authorize AntiBox directly to monitor your live Gemini & Claude weekly pools, cycle resets, and image tokens.")
+                    Text("Authorize AntiBox directly to monitor your active Gemini & Claude pools, cycle resets, and image tokens.")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 10)
                 }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
 
             // Primary Action: Google OAuth Login Popup
             VStack(spacing: 10) {
@@ -80,7 +78,7 @@ public struct AddAccountSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
+                    .padding(.vertical, 8)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.blue)
@@ -96,7 +94,7 @@ public struct AddAccountSheet: View {
             // Optional Manual Refresh Token Fallback
             VStack(spacing: 8) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         showingManualInput.toggle()
                     }
                 } label: {
@@ -111,26 +109,43 @@ public struct AddAccountSheet: View {
                 .buttonStyle(.plain)
 
                 if showingManualInput {
-                    VStack(spacing: 8) {
-                        SecureField("Google OAuth Refresh Token (1//...)", text: $manualRefreshToken)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Paste your Google OAuth Refresh Token:")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(.secondary)
 
-                        Button("Connect with Token") {
+                        SecureField("1//0...", text: $manualRefreshToken)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+
+                        Button {
                             addManualToken()
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Connect Token")
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                Spacer()
+                            }
+                            .padding(.vertical, 3)
                         }
                         .buttonStyle(.bordered)
-                        .font(.system(size: 11))
                         .disabled(manualRefreshToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .padding(10)
-                    .background(Color.primary.opacity(0.03))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .padding(12)
+                    .background(Color.primary.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
-        .padding(20)
-        .frame(width: 380)
+        .padding(22)
+        .frame(width: 400)
+        .fixedSize(horizontal: false, vertical: true)
         .background(VisualEffectView(material: .sheet, blendingMode: .behindWindow))
     }
 

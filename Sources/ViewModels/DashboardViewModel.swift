@@ -36,10 +36,76 @@ public final class DashboardViewModel: ObservableObject {
     private let independentEngine = IndependentQuotaEngine.shared
     private let accountsStorageKey = "com.antibox.saved_accounts_v3"
 
+    public enum MenuBarDisplayMode: String, CaseIterable, Identifiable, Codable {
+        case gemini = "gemini"
+        case claudeGpt = "claudeGpt"
+        case geminiImage = "geminiImage"
+
+        public var id: String { rawValue }
+
+        public var title: String {
+            switch self {
+            case .gemini: return "Gemini Quota"
+            case .claudeGpt: return "Claude & GPT-OSS Quota"
+            case .geminiImage: return "Gemini Image Quota"
+            }
+        }
+
+        public var shortLabel: String {
+            switch self {
+            case .gemini: return "Gemini"
+            case .claudeGpt: return "Claude"
+            case .geminiImage: return "Image"
+            }
+        }
+
+        public var iconName: String {
+            switch self {
+            case .gemini: return "sparkles"
+            case .claudeGpt: return "cpu"
+            case .geminiImage: return "photo.fill"
+            }
+        }
+    }
+
+    private let menuBarDisplayModeKey = "com.antibox.menuBarDisplayMode"
+
+    @Published public var menuBarDisplayMode: MenuBarDisplayMode = .gemini {
+        didSet {
+            UserDefaults.standard.set(menuBarDisplayMode.rawValue, forKey: menuBarDisplayModeKey)
+        }
+    }
+
+    public var currentMenuBarQuota: (percentage: Double?, label: String, icon: String) {
+        guard let account = selectedAccount else {
+            return (nil, "No Account", "gauge.with.dots.needle.33percent")
+        }
+        switch menuBarDisplayMode {
+        case .gemini:
+            let pct = account.remainingPercentage
+            return (pct, "\(Int(pct))%", "sparkles")
+        case .claudeGpt:
+            let tpGroup = currentQuotaGroups.first(where: { $0.id == "claude-gpt" })
+            let pct = tpGroup?.percentage ?? 0.0
+            return (pct, "\(Int(pct))%", "cpu")
+        case .geminiImage:
+            let pct = account.imageQuotaPercentage ?? currentQuotaGroups.first(where: { $0.id == "gemini" })?.imageQuota?.percentage
+            if let p = pct {
+                return (p, "\(Int(p))%", "photo.fill")
+            } else {
+                return (nil, "N/A", "photo.fill")
+            }
+        }
+    }
+
     private var secondTimer: AnyCancellable?
     private var syncTimer: AnyCancellable?
 
     public init() {
+        if let savedMode = UserDefaults.standard.string(forKey: menuBarDisplayModeKey),
+           let mode = MenuBarDisplayMode(rawValue: savedMode) {
+            self.menuBarDisplayMode = mode
+        }
         notificationManager.requestAuthorization()
         loadInitialData()
         startRealtimeTickers()
