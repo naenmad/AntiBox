@@ -36,6 +36,7 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
     public var resetDate: Date
     public var isActive: Bool
     public var quotas: [QuotaItem]
+    public var customRemainingPercentage: Double?
 
     public init(
         id: UUID = UUID(),
@@ -47,7 +48,8 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
         usedQuotaTokens: Int64 = 2_700_000,
         resetDate: Date = Date().addingTimeInterval(17940), // 4h 59m
         isActive: Bool = true,
-        quotas: [QuotaItem] = []
+        quotas: [QuotaItem] = [],
+        customRemainingPercentage: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -59,6 +61,7 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
         self.resetDate = resetDate
         self.isActive = isActive
         self.quotas = quotas
+        self.customRemainingPercentage = customRemainingPercentage
     }
 
     public var remainingTokens: Int64 {
@@ -66,6 +69,9 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
     }
 
     public var remainingPercentage: Double {
+        if let custom = customRemainingPercentage {
+            return custom
+        }
         guard totalQuotaTokens > 0 else { return 0.0 }
         let fraction = Double(remainingTokens) / Double(totalQuotaTokens)
         return min(max(fraction * 100.0, 0.0), 100.0)

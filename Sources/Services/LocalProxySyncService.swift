@@ -57,48 +57,80 @@ public final class LocalProxySyncService: Sendable {
             var totalRemainingTokens: Int64 = 0
             var totalCapacityTokens: Int64 = 0
 
+            var geminiBucketPct: Double = 100.0
+            var claudeBucketPct: Double = 100.0
+            _ = claudeBucketPct
+            var hasQuotaGroups = false
+
             if let detailData = try? Data(contentsOf: detailFile),
                let detailJson = try? JSONSerialization.jsonObject(with: detailData) as? [String: Any],
-               let quotaObj = detailJson["quota"] as? [String: Any],
-               let modelsArr = quotaObj["models"] as? [[String: Any]] {
+               let quotaObj = detailJson["quota"] as? [String: Any] {
 
-                for model in modelsArr {
-                    let rawName = (model["name"] as? String) ?? ""
-                    let displayName = (model["display_name"] as? String) ?? rawName
-                    let pct = Double((model["percentage"] as? Int) ?? 100)
-                    let resetStr = (model["reset_time"] as? String) ?? ""
-                    let resetDate = isoFormatter.date(from: resetStr) ?? Date().addingTimeInterval(17940)
-
-                    if resetDate < earliestReset && resetDate > Date() {
-                        earliestReset = resetDate
+                // Parse authoritative quota groups (Gemini Models & Claude/GPT models)
+                if let quotaGroups = quotaObj["quota_groups"] as? [[String: Any]] {
+                    hasQuotaGroups = true
+                    for group in quotaGroups {
+                        let dName = (group["display_name"] as? String) ?? ""
+                        if let buckets = group["buckets"] as? [[String: Any]] {
+                            for b in buckets {
+                                if (b["window"] as? String) == "weekly" {
+                                    let remFrac = (b["remaining_fraction"] as? Double) ?? 1.0
+                                    let pct = remFrac * 100.0
+                                    if dName.contains("Gemini") || (b["bucket_id"] as? String) == "gemini-weekly" {
+                                        geminiBucketPct = pct
+                                    } else if dName.contains("Claude") || (b["bucket_id"] as? String) == "3p-weekly" {
+                                        claudeBucketPct = pct
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
 
-                    let provider: AIProvider = rawName.lowercased().contains("claude") ? .claude : .gemini
+                if let modelsArr = quotaObj["models"] as? [[String: Any]] {
+                    var seenNames: Set<String> = []
 
-                    let iconKind: QuotaIconKind
-                    if rawName.lowercased().contains("lite") {
-                        iconKind = .robot
-                    } else if rawName.lowercased().contains("claude") {
-                        iconKind = .sunburst
-                    } else {
-                        iconKind = .sparkle
-                    }
+                    for model in modelsArr {
+                        let rawName = (model["name"] as? String) ?? ""
+                        let displayName = (model["display_name"] as? String) ?? rawName
 
-                    let customLabel: String?
-                    if pct <= 0 {
-                        customLabel = provider == .claude ? "Weekly 0%" : "0%"
-                    } else {
-                        customLabel = nil
-                    }
+                        // Filter out internal aliases or duplicates
+                        guard displayName != "None" && !rawName.isEmpty && !seenNames.contains(displayName) else {
+                            continue
+                        }
+                        seenNames.insert(displayName)
 
-                    // Estimate token quantities based on model capacity and percentage
-                    let maxTokens = Int64((model["max_tokens"] as? Int) ?? 1_000_000)
-                    let remaining = Int64(Double(maxTokens) * (pct / 100.0))
-                    totalRemainingTokens += remaining
-                    totalCapacityTokens += maxTokens
+                        let pct = Double((model["percentage"] as? Int) ?? 100)
+                        let resetStr = (model["reset_time"] as? String) ?? ""
+                        let resetDate = isoFormatter.date(from: resetStr) ?? Date().addingTimeInterval(17940)
 
-                    // Avoid duplicate placeholder entries
-                    if displayName != "None" && !rawName.isEmpty {
+                        if resetDate < earliestReset && resetDate > Date() {
+                            earliestReset = resetDate
+                        }
+
+                        let provider: AIProvider = rawName.lowercased().contains("claude") ? .claude : .gemini
+
+                        let iconKind: QuotaIconKind
+                        if rawName.lowercased().contains("lite") {
+                            iconKind = .robot
+                        } else if rawName.lowercased().contains("claude") {
+                            iconKind = .sunburst
+                        } else {
+                            iconKind = .sparkle
+                        }
+
+                        let customLabel: String?
+                        if pct <= 0 {
+                            customLabel = provider == .claude ? "Weekly 0%" : "0%"
+                        } else {
+                            customLabel = nil
+                        }
+
+                        let maxTokens = Int64((model["max_tokens"] as? Int) ?? 1_000_000)
+                        let remaining = Int64(Double(maxTokens) * (pct / 100.0))
+                        totalRemainingTokens += remaining
+                        totalCapacityTokens += maxTokens
+
                         quotaItems.append(
                             QuotaItem(
                                 name: displayName,
@@ -117,6 +149,9 @@ public final class LocalProxySyncService: Sendable {
 
             let providerGuess: AIProvider = quotaItems.contains(where: { $0.provider == .claude }) ? .claude : .gemini
 
+            // The account's primary active percentage is the Gemini weekly quota (e.g. 73.4%)
+            let authoritativePct: Double = hasQuotaGroups ? geminiBucketPct : (totalCapacityTokens > 0 ? (Double(totalRemainingTokens) / Double(totalCapacityTokens)) * 100.0 : 100.0)
+
             let account = Account(
                 id: uuid,
                 name: name,
@@ -127,7 +162,8 @@ public final class LocalProxySyncService: Sendable {
                 usedQuotaTokens: max(0, totalCapacityTokens - totalRemainingTokens),
                 resetDate: earliestReset,
                 isActive: !isDisabled,
-                quotas: quotaItems
+                quotas: quotaItems,
+                customRemainingPercentage: authoritativePct
             )
 
             syncedAccounts.append(account)
