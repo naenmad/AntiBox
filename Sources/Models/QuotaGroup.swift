@@ -1,6 +1,26 @@
 import Foundation
 import SwiftUI
 
+/// Represents Gemini Image Generation quota metrics
+public struct ImageQuota: Sendable {
+    public let percentage: Double
+    public let countdownString: String
+    public let resetDate: Date
+    public let modelName: String
+
+    public init(
+        percentage: Double,
+        countdownString: String,
+        resetDate: Date,
+        modelName: String = "Gemini 3.1 Flash Image"
+    ) {
+        self.percentage = percentage
+        self.countdownString = countdownString
+        self.resetDate = resetDate
+        self.modelName = modelName
+    }
+}
+
 /// Represents one of the two core quota categories (Gemini vs Claude/GPT)
 public struct QuotaGroup: Identifiable, Sendable {
     public let id: String
@@ -13,6 +33,7 @@ public struct QuotaGroup: Identifiable, Sendable {
     public let resetDate: Date
     public let description: String
     public let models: [QuotaItem]
+    public let imageQuota: ImageQuota?
 
     public init(
         id: String,
@@ -24,7 +45,8 @@ public struct QuotaGroup: Identifiable, Sendable {
         countdownString: String,
         resetDate: Date,
         description: String = "",
-        models: [QuotaItem] = []
+        models: [QuotaItem] = [],
+        imageQuota: ImageQuota? = nil
     ) {
         self.id = id
         self.title = title
@@ -36,6 +58,7 @@ public struct QuotaGroup: Identifiable, Sendable {
         self.resetDate = resetDate
         self.description = description
         self.models = models
+        self.imageQuota = imageQuota
     }
 
     public var isDepleted: Bool {

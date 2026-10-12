@@ -18,24 +18,22 @@ public struct MenuBarView: View {
                 .opacity(0.12)
 
             // Content Area
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 9) {
-                    // Smart Advisor Compact Banner
-                    if let recommendation = viewModel.recommendation {
-                        BudgetAdvisorCardView(recommendation: recommendation)
-                    }
-
-                    // Account Selector Capsule Bar
-                    if !viewModel.accounts.isEmpty {
-                        accountSwitcherBar
-                    }
-
-                    // 2 Core Group Cards (Gemini vs Claude/GPT-OSS)
-                    quotaListView
+            VStack(spacing: 9) {
+                // Smart Advisor Compact Banner
+                if let recommendation = viewModel.recommendation {
+                    BudgetAdvisorCardView(recommendation: recommendation)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+
+                // Account Selector Capsule Bar
+                if !viewModel.accounts.isEmpty {
+                    accountSwitcherBar
+                }
+
+                // 2 Core Group Cards (Gemini vs Claude/GPT-OSS)
+                quotaListView
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
 
             Divider()
                 .opacity(0.12)
@@ -43,7 +41,7 @@ public struct MenuBarView: View {
             // Footer
             footerView
         }
-        .frame(width: 360, height: 490)
+        .frame(width: 345)
         .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
@@ -138,14 +136,35 @@ public struct MenuBarView: View {
     private var accountSwitcherBar: some View {
         HStack {
             Menu {
-                ForEach(viewModel.accounts) { account in
-                    Button {
-                        viewModel.selectAccount(id: account.id)
-                    } label: {
-                        HStack {
-                            Text(account.email.isEmpty ? account.name : account.email)
-                            if account.id == viewModel.selectedAccount?.id {
-                                Image(systemName: "checkmark")
+                Section("Accounts") {
+                    ForEach(viewModel.accounts) { account in
+                        Button {
+                            viewModel.selectAccount(id: account.id)
+                        } label: {
+                            HStack {
+                                Text(account.email.isEmpty ? account.name : account.email)
+                                Text("(\(account.accountTier.displayName))")
+                                if account.id == viewModel.selectedAccount?.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let selected = viewModel.selectedAccount {
+                    Divider()
+                    Menu("Tier: \(selected.accountTier.displayName)") {
+                        ForEach(AccountTier.allCases, id: \.self) { t in
+                            Button {
+                                viewModel.updateAccountTier(id: selected.id, tier: t)
+                            } label: {
+                                HStack {
+                                    Text("\(t.displayName) (\(t.badgeLabel))")
+                                    if selected.accountTier == t {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
                             }
                         }
                     }
@@ -161,14 +180,21 @@ public struct MenuBarView: View {
                         .foregroundColor(.primary)
                         .lineLimit(1)
 
-                    if let tier = viewModel.selectedAccount?.tier {
-                        Text(tier)
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.blue)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.blue.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                    if let account = viewModel.selectedAccount {
+                        let tier = account.accountTier
+                        HStack(spacing: 2.5) {
+                            if tier == .ultra {
+                                Image(systemName: "crown.fill")
+                                    .font(.system(size: 7))
+                            }
+                            Text(tier.displayName.uppercased())
+                                .font(.system(size: 8.5, weight: .bold))
+                        }
+                        .foregroundColor(tier.color)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(tier.color.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
                     }
 
                     Image(systemName: "chevron.up.chevron.down")
@@ -183,10 +209,6 @@ public struct MenuBarView: View {
             .menuStyle(.borderlessButton)
 
             Spacer()
-
-            Text("\(viewModel.currentQuotaItems.count) models")
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
         }
     }
 

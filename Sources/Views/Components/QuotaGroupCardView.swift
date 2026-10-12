@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// Clean, frosted group card presenting one of the two core quota categories (Gemini vs Claude/GPT)
+/// Clean, fixed frosted card for the 2 core quota categories (Gemini vs Claude/GPT-OSS)
 public struct QuotaGroupCardView: View {
     public let group: QuotaGroup
     public let currentTime: Date
 
-    @State private var isExpanded: Bool = false
     @State private var isHovered: Bool = false
 
     public init(group: QuotaGroup, currentTime: Date = Date()) {
@@ -26,32 +25,32 @@ public struct QuotaGroupCardView: View {
     private let timerColor = Color(red: 0.92, green: 0.74, blue: 0.30)
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 9) {
             // Group Header Row
             HStack(spacing: 8) {
                 // Group Icon
                 Image(systemName: group.iconName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(group.accentColor)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 24, height: 24)
                     .background(group.accentColor.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 // Group Title
                 Text(group.title)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.primary)
 
                 Spacer(minLength: 4)
 
                 // Countdown Timer
-                HStack(spacing: 3) {
+                HStack(spacing: 3.5) {
                     Image(systemName: "clock")
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundColor(timerColor)
 
                     Text(group.countdownString)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                         .foregroundColor(timerColor)
                 }
 
@@ -67,8 +66,8 @@ public struct QuotaGroupCardView: View {
                 }
                 .foregroundColor(statusColor)
                 .padding(.horizontal, 7)
-                .padding(.vertical, 2.5)
-                .background(statusColor.opacity(0.1))
+                .padding(.vertical, 3)
+                .background(statusColor.opacity(0.12))
                 .clipShape(Capsule())
             }
 
@@ -84,39 +83,55 @@ public struct QuotaGroupCardView: View {
                         .animation(.easeInOut(duration: 0.3), value: group.percentage)
                 }
             }
-            .frame(height: 4)
+            .frame(height: 5)
 
-            // Sub-Models (Compact or Expanded)
-            if !group.models.isEmpty {
-                VStack(spacing: 4) {
-                    let displayedModels = isExpanded ? group.models : Array(group.models.prefix(3))
+            // Optional Dedicated Image Generation Quota (Gemini)
+            if let imageQuota = group.imageQuota {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "photo.badge.sparkles")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(Color(red: 0.70, green: 0.35, blue: 0.95))
 
-                    ForEach(displayedModels) { model in
-                        ModelQuotaRowView(item: model, currentTime: currentTime)
-                    }
-
-                    if group.models.count > 3 {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isExpanded.toggle()
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Text(isExpanded ? "Show fewer models" : "Show all \(group.models.count) models")
-                                    .font(.system(size: 10, weight: .medium))
-
-                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 8, weight: .semibold))
-                            }
+                        Text("Image Quota")
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundColor(.secondary)
-                            .padding(.top, 2)
+
+                        Spacer()
+
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 8.5))
+                                .foregroundColor(timerColor)
+
+                            Text(imageQuota.countdownString)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(timerColor)
                         }
-                        .buttonStyle(.plain)
+
+                        Text("\(Int(imageQuota.percentage))%")
+                            .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(imageQuota.percentage <= 15 ? Color.red : (imageQuota.percentage <= 25 ? Color.orange : Color(red: 0.22, green: 0.82, blue: 0.55)))
                     }
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.primary.opacity(0.05))
+
+                            Capsule()
+                                .fill(imageQuota.percentage <= 15 ? Color.red : (imageQuota.percentage <= 25 ? Color.orange : Color(red: 0.70, green: 0.35, blue: 0.95)))
+                                .frame(width: max(0, min(geo.size.width * CGFloat(imageQuota.percentage / 100.0), geo.size.width)))
+                                .animation(.easeInOut(duration: 0.3), value: imageQuota.percentage)
+                        }
+                    }
+                    .frame(height: 3.5)
                 }
+                .padding(.top, 2)
             }
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.primary.opacity(isHovered ? 0.045 : 0.025))

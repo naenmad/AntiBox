@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 public enum MainNavigationTab: String, CaseIterable, Identifiable {
     case overview = "Overview"
@@ -18,10 +19,11 @@ public enum MainNavigationTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// Full native macOS application window dashboard
+/// Native macOS application window dashboard with authentic Apple frosted glass translucency
 public struct MainDashboardView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var selectedTab: MainNavigationTab = .overview
+    @ObservedObject private var launchManager = LaunchAtLoginManager.shared
 
     public init(viewModel: DashboardViewModel) {
         self.viewModel = viewModel
@@ -30,15 +32,18 @@ public struct MainDashboardView: View {
     public var body: some View {
         NavigationSplitView {
             sidebarView
+                .scrollContentBackground(.hidden)
+                .background(VisualEffectView(material: .sidebar, blendingMode: .behindWindow))
         } detail: {
             detailContentView
         }
-        .frame(minWidth: 800, minHeight: 540)
+        .frame(minWidth: 840, minHeight: 560)
         .background(VisualEffectView(material: .underWindowBackground, blendingMode: .behindWindow))
+        .background(WindowAccessor())
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
-                // Current Account Indicator
-                HStack(spacing: 5) {
+                // Current Account & Tier Indicator
+                HStack(spacing: 6) {
                     Circle()
                         .fill(viewModel.selectedAccount?.status.color ?? .green)
                         .frame(width: 6, height: 6)
@@ -46,9 +51,26 @@ public struct MainDashboardView: View {
                     Text(viewModel.selectedAccount?.email.isEmpty ?? true ? (viewModel.selectedAccount?.name ?? "Account") : (viewModel.selectedAccount?.email ?? ""))
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundColor(.primary)
+
+                    if let acc = viewModel.selectedAccount {
+                        let tier = acc.accountTier
+                        HStack(spacing: 2) {
+                            if tier == .ultra {
+                                Image(systemName: "crown.fill")
+                                    .font(.system(size: 7.5))
+                            }
+                            Text(tier.displayName.uppercased())
+                                .font(.system(size: 8.5, weight: .bold))
+                        }
+                        .foregroundColor(tier.color)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(tier.color.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                    }
                 }
                 .padding(.horizontal, 8)
-                .padding(.vertical, 3.5)
+                .padding(.vertical, 4)
                 .background(Color.primary.opacity(0.04))
                 .clipShape(Capsule())
 
@@ -103,15 +125,20 @@ public struct MainDashboardView: View {
 
     @ViewBuilder
     private var detailContentView: some View {
-        switch selectedTab {
-        case .overview:
-            overviewView
-        case .accounts:
-            accountsListView
-        case .models:
-            modelsExplorerView
-        case .settings:
-            settingsView
+        ZStack {
+            VisualEffectView(material: .underWindowBackground, blendingMode: .behindWindow)
+                .ignoresSafeArea()
+
+            switch selectedTab {
+            case .overview:
+                overviewView
+            case .accounts:
+                accountsListView
+            case .models:
+                modelsExplorerView
+            case .settings:
+                settingsView
+            }
         }
     }
 
@@ -125,13 +152,13 @@ public struct MainDashboardView: View {
                     Text("Quota & Health Matrix")
                         .font(.system(size: 20, weight: .bold))
 
-                    Text("Live token allocations and cycle reset horizons for active pools")
+                    Text("Real-time token allocations and cycle reset horizons for active pools")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
 
                 // 2 Core Category Cards (Gemini vs Claude/GPT-OSS)
-                HStack(spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
                     ForEach(viewModel.currentQuotaGroups) { group in
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
@@ -146,26 +173,65 @@ public struct MainDashboardView: View {
 
                                 Text(group.displayPercentage)
                                     .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                    .foregroundColor(group.isDepleted ? Color.red : Color.green)
+                                    .foregroundColor(group.isDepleted ? Color.red : Color(red: 0.22, green: 0.82, blue: 0.55))
                             }
 
                             Text("Resets in \(group.countdownString)")
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                .foregroundColor(.orange)
+                                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                .foregroundColor(Color(red: 0.92, green: 0.74, blue: 0.30))
+
+                            // Core Progress Bar
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.primary.opacity(0.06))
+                                    Capsule().fill(group.isDepleted ? Color.red : Color(red: 0.22, green: 0.82, blue: 0.55))
+                                        .frame(width: max(0, min(geo.size.width * CGFloat(group.percentage / 100.0), geo.size.width)))
+                                }
+                            }
+                            .frame(height: 5)
+
+                            // Dedicated Gemini Image Quota
+                            if let imageQuota = group.imageQuota {
+                                Divider().opacity(0.12)
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "photo.badge.sparkles")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(Color(red: 0.70, green: 0.35, blue: 0.95))
+
+                                        Text("Gemini Image Quota")
+                                            .font(.system(size: 12, weight: .medium))
+
+                                        Spacer()
+
+                                        Text("Resets in \(imageQuota.countdownString)")
+                                            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                                            .foregroundColor(Color(red: 0.92, green: 0.74, blue: 0.30))
+
+                                        Text("\(Int(imageQuota.percentage))%")
+                                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                            .foregroundColor(imageQuota.percentage <= 15 ? Color.red : Color(red: 0.70, green: 0.35, blue: 0.95))
+                                    }
+
+                                    GeometryReader { geo in
+                                        ZStack(alignment: .leading) {
+                                            Capsule().fill(Color.primary.opacity(0.06))
+                                            Capsule().fill(imageQuota.percentage <= 15 ? Color.red : Color(red: 0.70, green: 0.35, blue: 0.95))
+                                                .frame(width: max(0, min(geo.size.width * CGFloat(imageQuota.percentage / 100.0), geo.size.width)))
+                                        }
+                                    }
+                                    .frame(height: 4)
+                                }
+                            }
 
                             Text(group.description)
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
-
-                            Divider().opacity(0.1)
-
-                            Text("\(group.models.count) models tracked in this group")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
                         }
                         .padding(14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.primary.opacity(0.03))
+                        .background(Color.white.opacity(0.04))
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -178,42 +244,72 @@ public struct MainDashboardView: View {
                 if let recommendation = viewModel.recommendation {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Smart Token Consumption Advisor")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .bold))
 
-                        BudgetAdvisorCardView(recommendation: recommendation)
+                        HStack(spacing: 12) {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .font(.system(size: 18))
+                                .foregroundColor(.cyan)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(recommendation.actionableSummary)
+                                    .font(.system(size: 12.5, weight: .medium))
+
+                                Text("Pace: \(recommendation.burnRateStatus.title) • Reset in: \(recommendation.daysUntilReset) days")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            Text(Account.formatTokens(recommendation.recommendedDailyBudget) + "/day")
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundColor(.cyan)
+                        }
+                        .padding(14)
+                        .background(Color.cyan.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                 }
 
-                // Multi-Account Pool Grid
+                // Active Account Switcher Grid
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Configured Account Pools (\(viewModel.accounts.count))")
-                        .font(.system(size: 13, weight: .semibold))
+                    Text("Configured Account Pools")
+                        .font(.system(size: 14, weight: .bold))
 
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 10) {
                         ForEach(viewModel.accounts) { acc in
-                            HStack {
+                            HStack(spacing: 8) {
                                 Circle()
                                     .fill(acc.status.color)
-                                    .frame(width: 8, height: 8)
+                                    .frame(width: 7, height: 7)
 
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 1) {
                                     Text(acc.email.isEmpty ? acc.name : acc.email)
                                         .font(.system(size: 12, weight: .medium))
                                         .lineLimit(1)
 
-                                    Text(acc.tier)
-                                        .font(.system(size: 9.5, weight: .semibold))
-                                        .foregroundColor(.secondary)
+                                    HStack(spacing: 4) {
+                                        Text(acc.accountTier.displayName.uppercased())
+                                            .font(.system(size: 8.5, weight: .bold))
+                                            .foregroundColor(acc.accountTier.color)
+
+                                        Text("• \(Int(acc.remainingPercentage))%")
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
 
                                 Spacer()
 
-                                Text("\(Int(acc.remainingPercentage))%")
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .foregroundColor(acc.status.color)
+                                if acc.id == viewModel.selectedAccount?.id {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.accentColor)
+                                }
                             }
                             .padding(10)
-                            .background(Color.primary.opacity(0.025))
+                            .background(Color.white.opacity(0.035))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -259,10 +355,25 @@ public struct MainDashboardView: View {
                         .fill(account.status.color)
                         .frame(width: 8, height: 8)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Text(account.email.isEmpty ? account.name : account.email)
                                 .font(.system(size: 13, weight: .semibold))
+
+                            // Tier Badge
+                            HStack(spacing: 2.5) {
+                                if account.accountTier == .ultra {
+                                    Image(systemName: "crown.fill")
+                                        .font(.system(size: 7))
+                                }
+                                Text(account.accountTier.displayName.uppercased())
+                                    .font(.system(size: 8.5, weight: .bold))
+                            }
+                            .foregroundColor(account.accountTier.color)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(account.accountTier.color.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
 
                             if account.id == viewModel.selectedAccount?.id {
                                 Text("ACTIVE")
@@ -275,16 +386,38 @@ public struct MainDashboardView: View {
                             }
                         }
 
-                        Text("Tier: \(account.tier) • \(account.quotas.count) models tracked")
+                        Text("Plan: \(account.accountTier.badgeLabel) • \(account.quotas.count) models tracked")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
 
                     Spacer()
 
+                    // Tier Selection Menu
+                    Menu {
+                        ForEach(AccountTier.allCases, id: \.self) { t in
+                            Button {
+                                viewModel.updateAccountTier(id: account.id, tier: t)
+                            } label: {
+                                HStack {
+                                    Text("\(t.displayName) (\(t.badgeLabel))")
+                                    if account.accountTier == t {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(account.accountTier.displayName)
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 65)
+
                     Text("\(Int(account.remainingPercentage))%")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundColor(account.status.color)
+                        .frame(width: 45, alignment: .trailing)
 
                     Button(account.id == viewModel.selectedAccount?.id ? "Selected" : "Set Active") {
                         viewModel.selectAccount(id: account.id)
@@ -292,9 +425,11 @@ public struct MainDashboardView: View {
                     .buttonStyle(.bordered)
                     .disabled(account.id == viewModel.selectedAccount?.id)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
+                .listRowBackground(Color.white.opacity(0.02))
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -314,9 +449,11 @@ public struct MainDashboardView: View {
 
             List(viewModel.currentQuotaItems) { item in
                 ModelQuotaRowView(item: item, currentTime: viewModel.currentTime)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 3)
+                    .listRowBackground(Color.white.opacity(0.02))
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .padding(.horizontal, 14)
         }
     }
@@ -325,7 +462,38 @@ public struct MainDashboardView: View {
 
     private var settingsView: some View {
         Form {
-            Section("Data Source Engine") {
+            Section("General & System Startup") {
+                Toggle("Launch AntiBox at Login", isOn: Binding(
+                    get: { launchManager.isEnabled },
+                    set: { launchManager.setLaunchAtLogin(enabled: $0) }
+                ))
+
+                Text("Automatically launch AntiBox companion in the Menu Bar when your Mac boots up.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                if !launchManager.statusMessage.isEmpty {
+                    Text(launchManager.statusMessage)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Section("Quota Monitoring & Image Tracking") {
+                Toggle("Track Gemini Flash Image Generation Quota", isOn: $viewModel.trackImageQuota)
+                Toggle("Notify When Quota Drops Below Safe Threshold", isOn: $viewModel.notifyLowQuota)
+
+                if viewModel.notifyLowQuota {
+                    Picker("Critical Alert Threshold", selection: $viewModel.lowQuotaThreshold) {
+                        Text("25% Remaining").tag(25.0)
+                        Text("20% Remaining").tag(20.0)
+                        Text("15% (Critical Default)").tag(15.0)
+                        Text("10% Remaining").tag(10.0)
+                    }
+                }
+            }
+
+            Section("Data Engine & Synchronization") {
                 Picker("Sync Mode", selection: $viewModel.engineMode) {
                     ForEach(DashboardViewModel.EngineMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
@@ -333,18 +501,44 @@ public struct MainDashboardView: View {
                 }
                 .pickerStyle(.segmented)
 
-                Text("Hybrid automatically syncs local Antigravity Tools accounts when available, while allowing standalone direct API keys via Keychain.")
+                Text("Hybrid automatically syncs local Antigravity Tools proxy accounts, with direct API key fallback.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
+
+                Button("Re-sync Local Accounts Now") {
+                    Task {
+                        await viewModel.refreshAllQuotas()
+                    }
+                }
             }
 
             Section("About AntiBox") {
                 LabeledContent("Version", value: "1.2.0")
+                LabeledContent("Design Language", value: "Native Apple Frosted Vibrancy")
                 LabeledContent("Platform", value: "macOS 14+ Sonoma / Sequoia")
                 LabeledContent("Security", value: "Apple Keychain Protected")
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .padding(20)
     }
+}
+
+/// Helper NSViewRepresentable to configure window transparency for full-surface frosted glass
+private struct WindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                window.titlebarAppearsTransparent = true
+                window.isOpaque = false
+                window.backgroundColor = .clear
+                window.styleMask.insert(.fullSizeContentView)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }

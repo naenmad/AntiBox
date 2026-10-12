@@ -61,6 +61,7 @@ public final class LocalProxySyncService: Sendable {
             var claudeBucketPct: Double = 100.0
             _ = claudeBucketPct
             var hasQuotaGroups = false
+            var accountTierString = "FREE"
 
             if let detailData = try? Data(contentsOf: detailFile),
                let detailJson = try? JSONSerialization.jsonObject(with: detailData) as? [String: Any],
@@ -145,6 +146,11 @@ public final class LocalProxySyncService: Sendable {
                         )
                     }
                 }
+
+                // Parse subscription tier (e.g. FREE, PLUS, PRO, ULTRA)
+                if let subTier = quotaObj["subscription_tier"] as? String, !subTier.isEmpty {
+                    accountTierString = subTier.uppercased()
+                }
             }
 
             let providerGuess: AIProvider = quotaItems.contains(where: { $0.provider == .claude }) ? .claude : .gemini
@@ -152,18 +158,31 @@ public final class LocalProxySyncService: Sendable {
             // The account's primary active percentage is the Gemini weekly quota (e.g. 73.4%)
             let authoritativePct: Double = hasQuotaGroups ? geminiBucketPct : (totalCapacityTokens > 0 ? (Double(totalRemainingTokens) / Double(totalCapacityTokens)) * 100.0 : 100.0)
 
+            // Extract dedicated Gemini Image Quota (gemini-3.1-flash-image)
+            var imagePct: Double? = nil
+            var imageReset: Date? = nil
+            var imageCountdownStr: String? = nil
+            if let imgItem = quotaItems.first(where: { $0.name.lowercased().contains("image") }) {
+                imagePct = imgItem.remainingPercentage
+                imageReset = imgItem.resetDate
+                imageCountdownStr = imgItem.countdownString(at: Date())
+            }
+
             let account = Account(
                 id: uuid,
                 name: name,
                 email: email,
                 provider: providerGuess,
-                tier: "PRO",
+                tier: accountTierString,
                 totalQuotaTokens: max(totalCapacityTokens, 10_000_000),
                 usedQuotaTokens: max(0, totalCapacityTokens - totalRemainingTokens),
                 resetDate: earliestReset,
                 isActive: !isDisabled,
                 quotas: quotaItems,
-                customRemainingPercentage: authoritativePct
+                customRemainingPercentage: authoritativePct,
+                imageQuotaPercentage: imagePct,
+                imageQuotaResetDate: imageReset,
+                imageQuotaCountdown: imageCountdownStr
             )
 
             syncedAccounts.append(account)

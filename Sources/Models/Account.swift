@@ -24,6 +24,50 @@ public enum QuotaStatus: Sendable {
     }
 }
 
+/// Tier classification for AI accounts: Free/Biasa, Plus, Pro, Ultra
+public enum AccountTier: String, Codable, CaseIterable, Sendable {
+    case free = "FREE"       // Regular / Free / Biasa
+    case plus = "PLUS"       // Plus
+    case pro = "PRO"         // Pro
+    case ultra = "ULTRA"     // Ultra
+
+    public var displayName: String {
+        switch self {
+        case .free: return "Free"
+        case .plus: return "Plus"
+        case .pro: return "Pro"
+        case .ultra: return "Ultra"
+        }
+    }
+
+    public var badgeLabel: String {
+        switch self {
+        case .free: return "Biasa"
+        case .plus: return "Plus"
+        case .pro: return "Pro"
+        case .ultra: return "Ultra"
+        }
+    }
+
+    public var color: Color {
+        switch self {
+        case .free: return Color.gray
+        case .plus: return Color(red: 0.15, green: 0.65, blue: 0.65) // Teal
+        case .pro: return Color(red: 0.25, green: 0.50, blue: 0.95)  // Royal Blue
+        case .ultra: return Color(red: 0.70, green: 0.35, blue: 0.95) // Vibrant Purple
+        }
+    }
+
+    public var iconName: String {
+        switch self {
+        case .free: return "person.crop.circle"
+        case .plus: return "plus.circle.fill"
+        case .pro: return "star.circle.fill"
+        case .ultra: return "crown.fill"
+        }
+    }
+}
+
 /// Represents an individual AI provider account
 public struct Account: Identifiable, Codable, Hashable, Sendable {
     public let id: UUID
@@ -37,19 +81,38 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
     public var isActive: Bool
     public var quotas: [QuotaItem]
     public var customRemainingPercentage: Double?
+    public var imageQuotaPercentage: Double?
+    public var imageQuotaResetDate: Date?
+    public var imageQuotaCountdown: String?
+
+    public var accountTier: AccountTier {
+        get {
+            let upper = tier.uppercased()
+            if upper.contains("ULTRA") { return .ultra }
+            if upper.contains("PLUS") { return .plus }
+            if upper.contains("PRO") { return .pro }
+            return .free
+        }
+        set {
+            tier = newValue.rawValue
+        }
+    }
 
     public init(
         id: UUID = UUID(),
         name: String,
         email: String = "",
         provider: AIProvider,
-        tier: String = "Pro",
+        tier: String = "PRO",
         totalQuotaTokens: Int64 = 10_000_000,
         usedQuotaTokens: Int64 = 2_700_000,
-        resetDate: Date = Date().addingTimeInterval(17940), // 4h 59m
+        resetDate: Date = Date().addingTimeInterval(17940),
         isActive: Bool = true,
         quotas: [QuotaItem] = [],
-        customRemainingPercentage: Double? = nil
+        customRemainingPercentage: Double? = nil,
+        imageQuotaPercentage: Double? = nil,
+        imageQuotaResetDate: Date? = nil,
+        imageQuotaCountdown: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -62,6 +125,9 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
         self.isActive = isActive
         self.quotas = quotas
         self.customRemainingPercentage = customRemainingPercentage
+        self.imageQuotaPercentage = imageQuotaPercentage
+        self.imageQuotaResetDate = imageQuotaResetDate
+        self.imageQuotaCountdown = imageQuotaCountdown
     }
 
     public var remainingTokens: Int64 {

@@ -24,6 +24,11 @@ public final class DashboardViewModel: ObservableObject {
     }
 
     @Published public var engineMode: EngineMode = .hybrid
+    @Published public var autoRefreshIntervalSeconds: Double = 60.0
+    @Published public var notifyLowQuota: Bool = true
+    @Published public var lowQuotaThreshold: Double = 15.0
+    @Published public var trackImageQuota: Bool = true
+
     private let independentEngine = IndependentQuotaEngine.shared
     private let accountsStorageKey = "com.antibox.saved_accounts_v3"
 
@@ -117,6 +122,25 @@ public final class DashboardViewModel: ObservableObject {
         let geminiReset = geminiModels.first?.resetDate ?? Date().addingTimeInterval(17940)
         let geminiCountdown = geminiModels.first?.countdownString(at: currentTime) ?? "4h 59m"
 
+        // Gemini Image Quota (gemini-3.1-flash-image)
+        var geminiImageQuota: ImageQuota? = nil
+        if trackImageQuota {
+            if let imgItem = geminiModels.first(where: { $0.name.lowercased().contains("image") }) {
+                geminiImageQuota = ImageQuota(
+                    percentage: imgItem.remainingPercentage,
+                    countdownString: imgItem.countdownString(at: currentTime),
+                    resetDate: imgItem.resetDate,
+                    modelName: imgItem.name
+                )
+            } else if let imgPct = selectedAccount?.imageQuotaPercentage, let imgDate = selectedAccount?.imageQuotaResetDate {
+                geminiImageQuota = ImageQuota(
+                    percentage: imgPct,
+                    countdownString: selectedAccount?.imageQuotaCountdown ?? "2d 1h",
+                    resetDate: imgDate
+                )
+            }
+        }
+
         let geminiGroup = QuotaGroup(
             id: "gemini",
             title: "Google Gemini",
@@ -126,7 +150,8 @@ public final class DashboardViewModel: ObservableObject {
             countdownString: geminiCountdown,
             resetDate: geminiReset,
             description: "Gemini Flash, Pro, and Specialized agents",
-            models: geminiModels
+            models: geminiModels,
+            imageQuota: geminiImageQuota
         )
 
         // Claude & GPT Group
@@ -148,6 +173,13 @@ public final class DashboardViewModel: ObservableObject {
         )
 
         return [geminiGroup, thirdPartyGroup]
+    }
+
+    public func updateAccountTier(id: UUID, tier: AccountTier) {
+        if let idx = accounts.firstIndex(where: { $0.id == id }) {
+            accounts[idx].accountTier = tier
+            saveAccounts()
+        }
     }
 
     // MARK: - Quota Refresh
