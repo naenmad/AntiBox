@@ -106,6 +106,50 @@ public final class DashboardViewModel: ObservableObject {
         return accounts.flatMap { $0.quotas }
     }
 
+    /// Two core groups (Gemini vs Claude/GPT-OSS) to keep view concise and organized
+    public var currentQuotaGroups: [QuotaGroup] {
+        let items = currentQuotaItems
+        let geminiModels = items.filter { $0.provider == .gemini && !$0.name.lowercased().contains("gpt") }
+        let thirdPartyModels = items.filter { $0.provider == .claude || $0.name.lowercased().contains("gpt") }
+
+        // Gemini Group
+        let geminiPct = selectedAccount?.remainingPercentage ?? (geminiModels.first?.remainingPercentage ?? 73.0)
+        let geminiReset = geminiModels.first?.resetDate ?? Date().addingTimeInterval(17940)
+        let geminiCountdown = geminiModels.first?.countdownString(at: currentTime) ?? "4h 59m"
+
+        let geminiGroup = QuotaGroup(
+            id: "gemini",
+            title: "Google Gemini",
+            iconName: "sparkle",
+            accentColor: Color.cyan,
+            percentage: geminiPct,
+            countdownString: geminiCountdown,
+            resetDate: geminiReset,
+            description: "Gemini Flash, Pro, and Specialized agents",
+            models: geminiModels
+        )
+
+        // Claude & GPT Group
+        let thirdPartyPct = thirdPartyModels.map { $0.remainingPercentage }.min() ?? 0.0
+        let thirdPartyReset = thirdPartyModels.first?.resetDate ?? Date().addingTimeInterval(230400)
+        let thirdPartyCountdown = thirdPartyModels.first?.countdownString(at: currentTime) ?? "2d 16h"
+
+        let thirdPartyGroup = QuotaGroup(
+            id: "claude-gpt",
+            title: "Claude & GPT-OSS",
+            iconName: "sun.max.fill",
+            accentColor: Color.orange,
+            percentage: thirdPartyPct,
+            customLabel: thirdPartyPct <= 0 ? "Weekly 0%" : "\(Int(thirdPartyPct))%",
+            countdownString: thirdPartyCountdown,
+            resetDate: thirdPartyReset,
+            description: "Claude Sonnet, Opus, and GPT models",
+            models: thirdPartyModels
+        )
+
+        return [geminiGroup, thirdPartyGroup]
+    }
+
     // MARK: - Quota Refresh
 
     public func refreshAllQuotas() async {

@@ -3,6 +3,7 @@ import SwiftUI
 /// Pixel-refined macOS MenuBar popover conforming strictly to Apple HIG
 public struct MenuBarView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    @Environment(\.openWindow) private var openWindow
 
     public init(viewModel: DashboardViewModel) {
         self.viewModel = viewModel
@@ -29,7 +30,7 @@ public struct MenuBarView: View {
                         accountSwitcherBar
                     }
 
-                    // Main Quota Indicator List (Directly matches screenshot design)
+                    // 2 Core Group Cards (Gemini vs Claude/GPT-OSS)
                     quotaListView
                 }
                 .padding(.horizontal, 12)
@@ -43,7 +44,7 @@ public struct MenuBarView: View {
             footerView
         }
         .frame(width: 360, height: 490)
-        .background(.ultraThinMaterial)
+        .background(VisualEffectView(material: .popover, blendingMode: .behindWindow))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -84,6 +85,19 @@ public struct MenuBarView: View {
 
             Spacer()
 
+            // Open Full App Button (⌘O)
+            Button {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Image(systemName: "macwindow")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Open Full Dashboard Window (⌘O)")
+            .keyboardShortcut("o", modifiers: [.command])
+
             // Refresh Button (⌘R)
             Button {
                 Task {
@@ -96,7 +110,7 @@ public struct MenuBarView: View {
                         .frame(width: 16, height: 16)
                 } else {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 11.5, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
@@ -177,24 +191,26 @@ public struct MenuBarView: View {
     }
 
     private var quotaListView: some View {
-        VStack(spacing: 5) {
-            ForEach(viewModel.currentQuotaItems) { item in
-                ModelQuotaRowView(item: item, currentTime: viewModel.currentTime)
+        VStack(spacing: 8) {
+            ForEach(viewModel.currentQuotaGroups) { group in
+                QuotaGroupCardView(group: group, currentTime: viewModel.currentTime)
             }
         }
     }
 
     private var footerView: some View {
         HStack {
-            HStack(spacing: 4) {
-                Text("\(viewModel.accounts.count) accounts active")
-                    .font(.system(size: 10.5))
-                    .foregroundColor(.secondary)
+            Button("Open Full Dashboard") {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
             }
+            .buttonStyle(.plain)
+            .font(.system(size: 10.5, weight: .medium))
+            .foregroundColor(.accentColor)
 
             Spacer()
 
-            Button("Quit AntiBox") {
+            Button("Quit") {
                 NSApplication.shared.terminate(nil)
             }
             .buttonStyle(.plain)
@@ -203,6 +219,6 @@ public struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: [.command])
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
     }
 }

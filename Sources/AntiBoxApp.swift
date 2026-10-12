@@ -17,6 +17,16 @@ struct AntiBoxApp: App {
     }
 
     var body: some Scene {
+        // Main Application Window
+        WindowGroup("AntiBox", id: "main") {
+            MainDashboardView(viewModel: dashboardViewModel)
+                .modelContainer(modelContainer)
+        }
+        .windowStyle(.titleBar)
+        .windowToolbarStyle(.unified)
+        .defaultSize(width: 880, height: 580)
+
+        // Menu Bar Companion Extra
         MenuBarExtra {
             MenuBarView(viewModel: dashboardViewModel)
                 .modelContainer(modelContainer)
@@ -47,9 +57,8 @@ struct AntiBoxApp: App {
     }
 
     private var lowestAccountPercentage: Double? {
-        let items = dashboardViewModel.currentQuotaItems
-        if !items.isEmpty {
-            return items.map { $0.remainingPercentage }.min()
+        if let account = dashboardViewModel.selectedAccount {
+            return account.remainingPercentage
         }
         let active = dashboardViewModel.accounts.filter { $0.isActive }
         guard !active.isEmpty else { return nil }
