@@ -155,9 +155,12 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
     }
 
     public var countdownString: String {
-        let now = Date()
-        guard resetDate > now else { return "0m" }
-        let diff = Calendar.current.dateComponents([.day, .hour, .minute], from: now, to: resetDate)
+        Account.formatCountdown(from: resetDate, at: Date())
+    }
+
+    public static func formatCountdown(from date: Date, at now: Date = Date()) -> String {
+        guard date > now else { return "0m" }
+        let diff = Calendar.current.dateComponents([.day, .hour, .minute], from: now, to: date)
         let days = diff.day ?? 0
         let hours = diff.hour ?? 0
         let minutes = diff.minute ?? 0

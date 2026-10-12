@@ -493,19 +493,31 @@ public struct MainDashboardView: View {
                 }
             }
 
-            Section("Data Engine & Synchronization") {
-                Picker("Sync Mode", selection: $viewModel.engineMode) {
+            Section("Data Engine & Independence") {
+                Picker("Engine Mode", selection: $viewModel.engineMode) {
                     ForEach(DashboardViewModel.EngineMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
 
-                Text("Hybrid automatically syncs local Antigravity Tools proxy accounts, with direct API key fallback.")
-                    .font(.system(size: 11))
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundColor(.green)
+                    Text(viewModel.standaloneStatus)
+                        .font(.system(size: 11, weight: .medium))
+                }
+
+                Button("Migrate & Detach from Antigravity Tools") {
+                    viewModel.detachFromAntigravityTools()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Text("Imports existing accounts and tokens directly into macOS Keychain and AntiBox local storage (~/Library/Application Support/AntiBox). After detachment, AntiBox operates completely standalone via direct Google OAuth & Cloud Code APIs without Antigravity Tools.")
+                    .font(.system(size: 10.5))
                     .foregroundColor(.secondary)
 
-                Button("Re-sync Local Accounts Now") {
+                Button("Refresh Live Quotas Now") {
                     Task {
                         await viewModel.refreshAllQuotas()
                     }

@@ -16,18 +16,22 @@ public final class DashboardViewModel: ObservableObject {
     private let notificationManager = NotificationManager.shared
     private let budgetAdvisor = SmartBudgetAdvisor.shared
     private let syncService = LocalProxySyncService.shared
+    private let directEngine = DirectCloudCodeEngine.shared
+    private let accountStore = AntiBoxAccountStore.shared
+
     public enum EngineMode: String, CaseIterable, Identifiable {
-        case hybrid = "Hybrid (Auto)"
-        case direct = "Direct API"
-        case localStore = "Local Store"
+        case direct = "Native Direct Engine (Independent)"
+        case hybrid = "Hybrid (Direct + Local Sync)"
+        case localStore = "Local Antigravity Tools (Legacy)"
         public var id: String { rawValue }
     }
 
-    @Published public var engineMode: EngineMode = .hybrid
+    @Published public var engineMode: EngineMode = .direct
     @Published public var autoRefreshIntervalSeconds: Double = 60.0
     @Published public var notifyLowQuota: Bool = true
     @Published public var lowQuotaThreshold: Double = 15.0
     @Published public var trackImageQuota: Bool = true
+    @Published public var standaloneStatus: String = "100% Standalone (Direct to Google Cloud API)"
 
     private let independentEngine = IndependentQuotaEngine.shared
     private let accountsStorageKey = "com.antibox.saved_accounts_v3"
@@ -47,19 +51,26 @@ public final class DashboardViewModel: ObservableObject {
     }
 
     private func loadInitialData() {
-        if syncService.isAvailable, let localSync = syncService.syncFromLocalStore() {
-            self.accounts = localSync.accounts
-            if let activeId = localSync.currentAccountId {
-                self.selectedAccountId = activeId
-            } else {
-                self.selectedAccountId = accounts.first?.id
-            }
+        // Priority 1: Load from AntiBox's independent store
+        let stored = accountStore.loadAccounts()
+        if !stored.isEmpty {
+            self.accounts = stored
+            self.selectedAccountId = stored.first?.id
         } else {
-            loadPersistedAccounts()
-            if accounts.isEmpty {
-                seedRealWorldAccounts()
-            }
-            if selectedAccountId == nil {
+            // First run: migrate accounts once into AntiBox independent store
+            let migration = accountStore.migrateFromAntigravityTools()
+            if migration.success {
+                self.accounts = accountStore.loadAccounts()
+                self.selectedAccountId = accounts.first?.id
+            } else if syncService.isAvailable, let localSync = syncService.syncFromLocalStore() {
+                self.accounts = localSync.accounts
+                self.selectedAccountId = localSync.currentAccountId ?? accounts.first?.id
+                accountStore.saveAccounts(self.accounts)
+            } else {
+                loadPersistedAccounts()
+                if accounts.isEmpty {
+                    seedRealWorldAccounts()
+                }
                 selectedAccountId = accounts.first?.id
             }
         }
@@ -74,25 +85,20 @@ public final class DashboardViewModel: ObservableObject {
                 self?.currentTime = now
             }
 
-        // Live 5-second store synchronizer to catch quota changes in background proxy
-        syncTimer = Timer.publish(every: 5.0, on: .main, in: .common)
+        // Live 30-second direct synchronizer
+        syncTimer = Timer.publish(every: 30.0, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.performBackgroundSync()
+                Task { [weak self] in
+                    await self?.refreshAllQuotas()
+                }
             }
     }
 
     private func performBackgroundSync() {
-        guard syncService.isAvailable, let localSync = syncService.syncFromLocalStore() else {
-            return
+        Task {
+            await refreshAllQuotas()
         }
-
-        // Update accounts with live data
-        self.accounts = localSync.accounts
-        if self.selectedAccountId == nil, let activeId = localSync.currentAccountId {
-            self.selectedAccountId = activeId
-        }
-        self.recalculateBudget()
     }
 
     /// Currently active account for focused model quota inspection
@@ -188,35 +194,81 @@ public final class DashboardViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        defer {
+            isLoading = false
+            recalculateBudget()
+            saveAccounts()
+        }
 
-        if engineMode == .direct {
-            for index in accounts.indices {
-                let acc = accounts[index]
+        // Direct standalone communication with Google Cloud Code API (No Antigravity Tools required)
+        if engineMode == .direct || engineMode == .hybrid {
+            var updated = self.accounts
+            var directSuccess = false
+
+            for i in 0..<updated.count {
+                let acc = updated[i]
                 guard acc.isActive else { continue }
-                if let key = try? keychainManager.retrieve(forAccount: acc.id), !key.isEmpty {
+
+                // Check Keychain for OAuth refresh token
+                if let refreshToken = try? keychainManager.retrieve(forAccount: acc.id), !refreshToken.isEmpty {
+                    do {
+                        let accessToken = try await directEngine.refreshAccessToken(refreshToken: refreshToken)
+                        let directRes = try await directEngine.fetchDirectQuotas(accessToken: accessToken)
+
+                        updated[i].customRemainingPercentage = directRes.geminiWeeklyPercentage
+                        updated[i].resetDate = directRes.geminiResetDate
+                        updated[i].imageQuotaPercentage = directRes.imageQuotaPercentage
+                        updated[i].imageQuotaResetDate = directRes.imageQuotaResetDate
+                        if let imgDate = directRes.imageQuotaResetDate {
+                            updated[i].imageQuotaCountdown = Account.formatCountdown(from: imgDate, at: currentTime)
+                        }
+                        if !directRes.models.isEmpty {
+                            updated[i].quotas = directRes.models
+                        }
+                        directSuccess = true
+                    } catch {
+                        print("[AntiBox] Direct Google API sync failed for \(acc.email): \(error)")
+                    }
+                } else if let apiKey = try? keychainManager.retrieve(forAccount: acc.id), !apiKey.isEmpty {
                     if acc.provider == .gemini {
-                        if let live = try? await independentEngine.fetchGeminiDirectQuota(apiKey: key) {
-                            accounts[index].quotas = live
+                        if let live = try? await independentEngine.fetchGeminiDirectQuota(apiKey: apiKey) {
+                            updated[i].quotas = live
                         }
                     } else {
-                        if let live = try? await independentEngine.fetchClaudeDirectQuota(apiKey: key) {
-                            accounts[index].quotas = live
+                        if let live = try? await independentEngine.fetchClaudeDirectQuota(apiKey: apiKey) {
+                            updated[i].quotas = live
                         }
                     }
                 }
             }
-        } else {
-            performBackgroundSync()
+
+            if directSuccess {
+                self.accounts = updated
+                standaloneStatus = "Active: Direct Standalone Google Cloud API"
+                return
+            }
+        }
+
+        // Fallback only if local proxy is present and direct credentials not yet configured
+        if syncService.isAvailable, let localSync = syncService.syncFromLocalStore() {
+            self.accounts = localSync.accounts
         }
 
         for account in accounts where account.isActive {
             notificationManager.evaluateQuotaThreshold(for: account)
         }
+    }
 
-        saveAccounts()
-        recalculateBudget()
-        isLoading = false
+    public func detachFromAntigravityTools() {
+        let migration = accountStore.migrateFromAntigravityTools()
+        if migration.success {
+            self.accounts = accountStore.loadAccounts()
+            self.engineMode = .direct
+            standaloneStatus = "100% Standalone (Migrated \(migration.importedCount) accounts)"
+            Task {
+                await refreshAllQuotas()
+            }
+        }
     }
 
     // MARK: - Account Management
@@ -291,6 +343,7 @@ public final class DashboardViewModel: ObservableObject {
     // MARK: - Persistence
 
     private func saveAccounts() {
+        accountStore.saveAccounts(accounts)
         if let encoded = try? JSONEncoder().encode(accounts) {
             UserDefaults.standard.set(encoded, forKey: accountsStorageKey)
         }
