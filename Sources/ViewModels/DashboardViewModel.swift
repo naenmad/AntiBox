@@ -36,76 +36,56 @@ public final class DashboardViewModel: ObservableObject {
     private let independentEngine = IndependentQuotaEngine.shared
     private let accountsStorageKey = "com.antibox.saved_accounts_v3"
 
-    public enum MenuBarDisplayMode: String, CaseIterable, Identifiable, Codable {
-        case gemini = "gemini"
-        case claudeGpt = "claudeGpt"
-        case geminiImage = "geminiImage"
-
-        public var id: String { rawValue }
-
-        public var title: String {
-            switch self {
-            case .gemini: return "Gemini Quota"
-            case .claudeGpt: return "Claude & GPT-OSS Quota"
-            case .geminiImage: return "Gemini Image Quota"
-            }
-        }
-
-        public var shortLabel: String {
-            switch self {
-            case .gemini: return "Gemini"
-            case .claudeGpt: return "Claude"
-            case .geminiImage: return "Image"
-            }
-        }
-
-        public var iconName: String {
-            switch self {
-            case .gemini: return "sparkles"
-            case .claudeGpt: return "cpu"
-            case .geminiImage: return "photo.fill"
-            }
-        }
+    public struct MenuBarMetricItem: Identifiable, Sendable {
+        public let id: String
+        public let label: String
+        public let percentage: Int
+        public let iconSystemName: String
     }
 
-    private let menuBarDisplayModeKey = "com.antibox.menuBarDisplayMode"
-
-    @Published public var menuBarDisplayMode: MenuBarDisplayMode = .gemini {
-        didSet {
-            UserDefaults.standard.set(menuBarDisplayMode.rawValue, forKey: menuBarDisplayModeKey)
-        }
+    @Published public var menuBarShowGemini: Bool = true {
+        didSet { UserDefaults.standard.set(menuBarShowGemini, forKey: "com.antibox.bar_show_gemini") }
+    }
+    @Published public var menuBarShowClaudeGpt: Bool = true {
+        didSet { UserDefaults.standard.set(menuBarShowClaudeGpt, forKey: "com.antibox.bar_show_claude_gpt") }
+    }
+    @Published public var menuBarShowImage: Bool = false {
+        didSet { UserDefaults.standard.set(menuBarShowImage, forKey: "com.antibox.bar_show_image") }
     }
 
-    public var currentMenuBarQuota: (percentage: Double?, label: String, icon: String) {
-        guard let account = selectedAccount else {
-            return (nil, "No Account", "gauge.with.dots.needle.33percent")
+    public var menuBarActiveMetrics: [MenuBarMetricItem] {
+        guard let account = selectedAccount else { return [] }
+        var items: [MenuBarMetricItem] = []
+
+        if menuBarShowGemini {
+            let pct = Int(account.remainingPercentage)
+            items.append(MenuBarMetricItem(id: "gemini", label: "Gemini", percentage: pct, iconSystemName: "sparkles"))
         }
-        switch menuBarDisplayMode {
-        case .gemini:
-            let pct = account.remainingPercentage
-            return (pct, "\(Int(pct))%", "sparkles")
-        case .claudeGpt:
+
+        if menuBarShowClaudeGpt {
             let tpGroup = currentQuotaGroups.first(where: { $0.id == "claude-gpt" })
-            let pct = tpGroup?.percentage ?? 0.0
-            return (pct, "\(Int(pct))%", "cpu")
-        case .geminiImage:
-            let pct = account.imageQuotaPercentage ?? currentQuotaGroups.first(where: { $0.id == "gemini" })?.imageQuota?.percentage
-            if let p = pct {
-                return (p, "\(Int(p))%", "photo.fill")
-            } else {
-                return (nil, "N/A", "photo.fill")
+            let pct = Int(tpGroup?.percentage ?? 0.0)
+            items.append(MenuBarMetricItem(id: "claude-gpt", label: "Claude", percentage: pct, iconSystemName: "cpu"))
+        }
+
+        if menuBarShowImage {
+            let imgPct = account.imageQuotaPercentage ?? currentQuotaGroups.first(where: { $0.id == "gemini" })?.imageQuota?.percentage
+            if let p = imgPct {
+                items.append(MenuBarMetricItem(id: "image", label: "Image", percentage: Int(p), iconSystemName: "photo.fill"))
             }
         }
+
+        return items
     }
 
     private var secondTimer: AnyCancellable?
     private var syncTimer: AnyCancellable?
 
     public init() {
-        if let savedMode = UserDefaults.standard.string(forKey: menuBarDisplayModeKey),
-           let mode = MenuBarDisplayMode(rawValue: savedMode) {
-            self.menuBarDisplayMode = mode
-        }
+        self.menuBarShowGemini = UserDefaults.standard.object(forKey: "com.antibox.bar_show_gemini") as? Bool ?? true
+        self.menuBarShowClaudeGpt = UserDefaults.standard.object(forKey: "com.antibox.bar_show_claude_gpt") as? Bool ?? true
+        self.menuBarShowImage = UserDefaults.standard.object(forKey: "com.antibox.bar_show_image") as? Bool ?? false
+
         notificationManager.requestAuthorization()
         loadInitialData()
         startRealtimeTickers()

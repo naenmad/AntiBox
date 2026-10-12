@@ -169,7 +169,7 @@ public final class LocalProxySyncService: Sendable {
                 }
             }
 
-            let providerGuess: AIProvider = quotaItems.contains(where: { $0.provider == .claude }) ? .claude : .gemini
+            let providerGuess: AIProvider = .gemini
 
             // The account's primary active percentage is the Gemini weekly quota (e.g. 73.4%)
             let authoritativePct: Double = hasQuotaGroups ? geminiBucketPct : (totalCapacityTokens > 0 ? (Double(totalRemainingTokens) / Double(totalCapacityTokens)) * 100.0 : 100.0)

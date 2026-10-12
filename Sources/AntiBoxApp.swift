@@ -31,15 +31,28 @@ struct AntiBoxApp: App {
             MenuBarView(viewModel: dashboardViewModel)
                 .modelContainer(modelContainer)
         } label: {
-            HStack(spacing: 4) {
-                let status = dashboardViewModel.currentMenuBarQuota
-                Image(systemName: status.icon)
-                if let pct = status.percentage {
-                    Text("\(Int(pct))%")
-                        .font(.system(size: 11, design: .rounded).monospacedDigit())
+            HStack(spacing: 6) {
+                let metrics = dashboardViewModel.menuBarActiveMetrics
+                if metrics.isEmpty {
+                    Image(systemName: "gauge.with.dots.needle.33percent")
+                    if let acc = dashboardViewModel.selectedAccount {
+                        Text("\(Int(acc.remainingPercentage))%")
+                            .font(.system(size: 11, design: .rounded).monospacedDigit())
+                    }
                 } else {
-                    Text(status.label)
-                        .font(.system(size: 11, design: .rounded))
+                    ForEach(Array(metrics.enumerated()), id: \.element.id) { index, item in
+                        HStack(spacing: 3) {
+                            Image(systemName: item.iconSystemName)
+                                .font(.system(size: 10))
+                            Text("\(item.percentage)%")
+                                .font(.system(size: 11, design: .rounded).monospacedDigit())
+                        }
+                        if index < metrics.count - 1 {
+                            Text("•")
+                                .foregroundColor(.secondary.opacity(0.6))
+                                .font(.system(size: 9))
+                        }
+                    }
                 }
             }
         }

@@ -48,19 +48,13 @@ public struct AccountRowView: View {
                 Spacer()
 
                 // Percentage Badge
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(account.status.color)
-                        .frame(width: 6, height: 6)
-
-                    Text("\(String(format: "%.0f", account.remainingPercentage))%")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(account.status.color)
-                }
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(account.status.color.opacity(0.1))
-                .clipShape(Capsule())
+                Text("\(String(format: "%.0f", account.remainingPercentage))%")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(account.status.color)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(account.status.color.opacity(0.1))
+                    .clipShape(Capsule())
             }
 
             // Quota Progress Bar

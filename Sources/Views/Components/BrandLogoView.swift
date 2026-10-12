@@ -28,7 +28,7 @@ public struct BrandLogoView: View {
             case .chatgpt:
                 singleLogo(name: "chatgpt_logo", fallbackSystemIcon: "circle.grid.hex", fallbackColor: .teal)
             case .claudeAndGpt:
-                HStack(spacing: -size * 0.22) {
+                HStack(spacing: 3) {
                     singleLogo(name: "claude_logo", fallbackSystemIcon: "cpu", fallbackColor: .orange)
                     singleLogo(name: "chatgpt_logo", fallbackSystemIcon: "circle.grid.hex", fallbackColor: .teal)
                 }

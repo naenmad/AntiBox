@@ -57,49 +57,8 @@ public struct MenuBarView: View {
 
     private var headerView: some View {
         HStack(spacing: 8) {
-            // App Branding with live status dot
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color(red: 0.22, green: 0.88, blue: 0.62))
-                    .frame(width: 7, height: 7)
-
-                Text("AntiBox")
-                    .font(.system(size: 13, weight: .bold))
-
-                Text("Quota")
-                    .font(.system(size: 11, weight: .regular))
-                    .foregroundColor(.secondary)
-            }
-
-            // Quick Menu Bar Metric Selector
-            Menu {
-                ForEach(DashboardViewModel.MenuBarDisplayMode.allCases) { mode in
-                    Button {
-                        viewModel.menuBarDisplayMode = mode
-                    } label: {
-                        HStack {
-                            Text(mode.title)
-                            if viewModel.menuBarDisplayMode == mode {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 3.5) {
-                    Image(systemName: viewModel.menuBarDisplayMode.iconName)
-                        .font(.system(size: 9))
-                    Text(viewModel.menuBarDisplayMode.shortLabel)
-                        .font(.system(size: 9.5, weight: .semibold))
-                }
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 5.5)
-                .padding(.vertical, 2.5)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(Capsule())
-            }
-            .menuStyle(.borderlessButton)
-            .help("Choose metric shown on macOS top bar")
+            Text("AntiBox")
+                .font(.system(size: 13, weight: .bold))
 
             Spacer()
 
@@ -174,20 +133,6 @@ public struct MenuBarView: View {
 
                 if let selected = viewModel.selectedAccount {
                     Divider()
-                    Menu("Tier: \(selected.accountTier.displayName)") {
-                        ForEach(AccountTier.allCases, id: \.self) { t in
-                            Button {
-                                viewModel.updateAccountTier(id: selected.id, tier: t)
-                            } label: {
-                                HStack {
-                                    Text("\(t.displayName) (\(t.badgeLabel))")
-                                    if selected.accountTier == t {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    }
                     Button(role: .destructive) {
                         viewModel.deleteAccount(id: selected.id)
                     } label: {
@@ -196,9 +141,7 @@ public struct MenuBarView: View {
                 }
             } label: {
                 HStack(spacing: 5) {
-                    Circle()
-                        .fill(viewModel.selectedAccount?.status.color ?? .green)
-                        .frame(width: 6, height: 6)
+                    BrandLogoView(.gemini, size: 13)
 
                     Text(viewModel.selectedAccount?.email.isEmpty ?? true ? (viewModel.selectedAccount?.name ?? "Account") : (viewModel.selectedAccount?.email ?? ""))
                         .font(.system(size: 11, weight: .semibold))

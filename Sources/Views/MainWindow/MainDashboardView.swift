@@ -46,9 +46,7 @@ public struct MainDashboardView: View {
             ToolbarItemGroup(placement: .automatic) {
                 // Current Account & Tier Indicator
                 HStack(spacing: 6) {
-                    Circle()
-                        .fill(viewModel.selectedAccount?.status.color ?? .green)
-                        .frame(width: 6, height: 6)
+                    BrandLogoView(.gemini, size: 13)
 
                     Text(viewModel.selectedAccount?.email.isEmpty ?? true ? (viewModel.selectedAccount?.name ?? "Account") : (viewModel.selectedAccount?.email ?? ""))
                         .font(.system(size: 11.5, weight: .medium))
@@ -282,9 +280,7 @@ public struct MainDashboardView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 10) {
                         ForEach(viewModel.accounts) { acc in
                             HStack(spacing: 8) {
-                                Circle()
-                                    .fill(acc.status.color)
-                                    .frame(width: 7, height: 7)
+                                BrandLogoView(.gemini, size: 12)
 
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(acc.email.isEmpty ? acc.name : acc.email)
@@ -396,26 +392,14 @@ public struct MainDashboardView: View {
 
                     Spacer()
 
-                    // Tier Selection Menu
-                    Menu {
-                        ForEach(AccountTier.allCases, id: \.self) { t in
-                            Button {
-                                viewModel.updateAccountTier(id: account.id, tier: t)
-                            } label: {
-                                HStack {
-                                    Text("\(t.displayName) (\(t.badgeLabel))")
-                                    if account.accountTier == t {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Text(account.accountTier.displayName)
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .menuStyle(.borderlessButton)
-                    .frame(width: 65)
+                    // Detected Subscription Tier Badge (Read-only)
+                    Text(account.accountTier.displayName)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(account.accountTier.color)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(account.accountTier.color.opacity(0.12))
+                        .clipShape(Capsule())
 
                     Text("\(Int(account.remainingPercentage))%")
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
@@ -506,15 +490,12 @@ public struct MainDashboardView: View {
                 }
             }
 
-            Section("Menu Bar Display Metric") {
-                Picker("Display in Menu Bar", selection: $viewModel.menuBarDisplayMode) {
-                    ForEach(DashboardViewModel.MenuBarDisplayMode.allCases) { mode in
-                        Label(mode.title, systemImage: mode.iconName).tag(mode)
-                    }
-                }
-                .pickerStyle(.radioGroup)
+            Section("Menu Bar Display Settings") {
+                Toggle("Show Google Gemini Quota", isOn: $viewModel.menuBarShowGemini)
+                Toggle("Show Claude & GPT-OSS Quota", isOn: $viewModel.menuBarShowClaudeGpt)
+                Toggle("Show Gemini Image Generation Quota", isOn: $viewModel.menuBarShowImage)
 
-                Text("Choose whether the macOS Menu Bar item shows Gemini Quota, Claude & GPT-OSS Quota, or Gemini Image Quota.")
+                Text("Check any combination of quotas to display together on the top macOS Menu Bar.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
