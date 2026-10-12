@@ -78,6 +78,12 @@ public final class DashboardViewModel: ObservableObject {
         return items
     }
 
+    // Antigravity IDE Synchronization State
+    @Published public var activeIDEAccountEmail: String? = nil
+    @Published public var ideSwitchStatusMessage: String? = nil
+    @Published public var isSwitchingIDE: Bool = false
+    public let ideSyncService = AntigravityIDESyncService.shared
+
     private var secondTimer: AnyCancellable?
     private var syncTimer: AnyCancellable?
 
@@ -89,6 +95,7 @@ public final class DashboardViewModel: ObservableObject {
         notificationManager.requestAuthorization()
         loadInitialData()
         startRealtimeTickers()
+        checkActiveIDEAccount()
     }
 
     deinit {
@@ -317,10 +324,35 @@ public final class DashboardViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Account Management
+    // MARK: - Account Management & IDE Hot-Switching
 
     public func selectAccount(id: UUID) {
         selectedAccountId = id
+    }
+
+    public func checkActiveIDEAccount() {
+        let (email, _) = ideSyncService.getActiveIDEAccount()
+        self.activeIDEAccountEmail = email
+    }
+
+    /// Hot-switches the open Antigravity IDE directly to the target account credentials
+    public func switchAntigravityIDE(to accountId: UUID) async {
+        guard let account = accounts.first(where: { $0.id == accountId }) else { return }
+        isSwitchingIDE = true
+        selectAccount(id: accountId)
+
+        let result = await ideSyncService.switchToAccount(account: account)
+        isSwitchingIDE = false
+        ideSwitchStatusMessage = result.message
+        checkActiveIDEAccount()
+
+        // Clear status message after 4 seconds
+        Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if self.ideSwitchStatusMessage == result.message {
+                self.ideSwitchStatusMessage = nil
+            }
+        }
     }
 
     /// Connects a new Antigravity account directly via native Google OAuth login popup

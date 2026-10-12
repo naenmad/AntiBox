@@ -401,7 +401,9 @@ public struct MainDashboardView: View {
                                     .stroke(acc.id == viewModel.selectedAccount?.id ? Color.accentColor : Color.white.opacity(0.06), lineWidth: acc.id == viewModel.selectedAccount?.id ? 1 : 0.5)
                             )
                             .onTapGesture {
-                                viewModel.selectAccount(id: acc.id)
+                                Task {
+                                    await viewModel.switchAntigravityIDE(to: acc.id)
+                                }
                             }
                         }
                     }
@@ -594,17 +596,32 @@ public struct MainDashboardView: View {
 
     private var accountsListView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
+            HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Account Management")
                         .font(.system(size: 18, weight: .bold))
 
-                    Text("All local proxy pools and direct API configurations")
+                    Text("Direct Google Cloud Code OAuth tokens & Antigravity IDE active profile")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
 
                 Spacer()
+
+                if let ideEmail = viewModel.activeIDEAccountEmail {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                        Text("Active in IDE: \(ideEmail)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(Capsule())
+                }
 
                 Button("Connect Account") {
                     viewModel.showingAddAccountSheet = true
@@ -613,7 +630,26 @@ public struct MainDashboardView: View {
             }
             .padding([.horizontal, .top], 22)
 
+            // Switch Toast Banner
+            if let msg = viewModel.ideSwitchStatusMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text(msg)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.green.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 22)
+                .transition(.opacity)
+            }
+
             List(viewModel.accounts) { account in
+                let isIDEActive = (account.email.lowercased() == (viewModel.activeIDEAccountEmail ?? "").lowercased())
+
                 HStack(spacing: 12) {
                     let brand: BrandLogoKind = (account.provider == .claude) ? .claude : .gemini
                     BrandLogoView(brand, size: 18)
@@ -641,14 +677,18 @@ public struct MainDashboardView: View {
                             .background(account.accountTier.color.opacity(0.12))
                             .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
 
-                            if account.id == viewModel.selectedAccount?.id {
-                                Text("ACTIVE")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.green)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(Color.green.opacity(0.12))
-                                    .clipShape(Capsule())
+                            if isIDEActive {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 7))
+                                    Text("IDE ACTIVE")
+                                        .font(.system(size: 8.5, weight: .bold))
+                                }
+                                .foregroundColor(.green)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.green.opacity(0.12))
+                                .clipShape(Capsule())
                             }
                         }
 
@@ -672,11 +712,29 @@ public struct MainDashboardView: View {
                         .foregroundColor(account.status.color)
                         .frame(width: 45, alignment: .trailing)
 
-                    Button(account.id == viewModel.selectedAccount?.id ? "Selected" : "Set Active") {
-                        viewModel.selectAccount(id: account.id)
+                    // Switch Antigravity IDE button
+                    Button {
+                        Task {
+                            await viewModel.switchAntigravityIDE(to: account.id)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if viewModel.isSwitchingIDE && account.id == viewModel.selectedAccount?.id {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 12, height: 12)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 10))
+                            }
+                            Text(isIDEActive ? "IDE Active" : "Switch IDE")
+                                .font(.system(size: 11, weight: .medium))
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(account.id == viewModel.selectedAccount?.id)
+                    .buttonStyle(.borderedProminent)
+                    .tint(isIDEActive ? Color.gray.opacity(0.35) : Color.accentColor)
+                    .disabled(viewModel.isSwitchingIDE)
+                    .help("Directly switch open Antigravity IDE to use this account")
 
                     // Delete Account Button
                     Button(role: .destructive) {

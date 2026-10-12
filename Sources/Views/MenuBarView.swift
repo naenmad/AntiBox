@@ -118,7 +118,9 @@ public struct MenuBarView: View {
                 Section("Accounts") {
                     ForEach(viewModel.accounts) { account in
                         Button {
-                            viewModel.selectAccount(id: account.id)
+                            Task {
+                                await viewModel.switchAntigravityIDE(to: account.id)
+                            }
                         } label: {
                             HStack {
                                 Text(account.email.isEmpty ? account.name : account.email)
@@ -180,6 +182,17 @@ public struct MenuBarView: View {
             .menuStyle(.borderlessButton)
 
             Spacer()
+
+            if viewModel.isSwitchingIDE {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 14, height: 14)
+            } else if let msg = viewModel.ideSwitchStatusMessage {
+                Text(msg)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundColor(.green)
+                    .lineLimit(1)
+            }
         }
     }
 
