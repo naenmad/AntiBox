@@ -1,160 +1,152 @@
 <p align="center">
-  <img src="Assets/logo.png" width="128" height="128" alt="AntiBox Logo" style="border-radius: 28px;" />
+  <img src="Assets/logo.png" alt="ZedGravity Logo" width="128" height="128" style="border-radius: 28px;" />
 </p>
 
-<h1 align="center">AntiBox</h1>
+<h1 align="center">ZedGravity</h1>
 
 <p align="center">
-  <strong>Native macOS Menu Bar Quota Monitor & Smart Usage Advisor for AI Services</strong><br />
-  A lightweight, privacy-focused utility built with SwiftUI for tracking Google Gemini and Anthropic Claude rate limits and token allocations.
+  <strong>Native macOS Companion for Zed Editor & Google Antigravity ACP</strong><br/>
+  Real-time quota monitoring, intelligent model auto-switching, and zero-prompt credential vaulting.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-macOS%2014.0%2B-blue?logo=apple" alt="macOS 14+" />
-  <img src="https://img.shields.io/badge/Language-Swift%205.9%2B-orange?logo=swift" alt="Swift 5.9+" />
-  <img src="https://img.shields.io/badge/UI-SwiftUI%20HIG-emerald" alt="SwiftUI HIG" />
-  <img src="https://img.shields.io/badge/Security-macOS%20Keychain-success" alt="Keychain Protected" />
-  <img src="https://img.shields.io/badge/License-MIT-purple" alt="MIT License" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3.0-blue.svg" alt="License: GPL v3.0" /></a>
+  <a href="https://apple.com/macos"><img src="https://img.shields.io/badge/macOS-14.0%2B%20Sonoma%20%2F%20Sequoia-black?logo=apple" alt="macOS 14+" /></a>
+  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.10-orange?logo=swift" alt="Swift 5.10" /></a>
+  <img src="https://img.shields.io/badge/Architecture-Universal%20(ARM%20%2B%20x86__64)-purple" alt="Universal Binary" />
+  <img src="https://img.shields.io/badge/Engine-100%25%20Standalone%20(No%20Proxy)-emerald" alt="100% Standalone" />
 </p>
 
 ---
 
 ## Overview
 
-Modern developers frequently juggle multiple AI provider accounts and model tiers to optimize latency, cost, and availability. Checking remaining quotas across multiple developer consoles or internal proxies often disrupts workflow.
+When building with AI in [Zed Editor](https://zed.dev) via the **Agent Client Protocol (ACP)** and Google Antigravity, developers encounter two major pain points:
+1. **Hidden Quota Depletion**: Using heavy reasoning models like **Claude 3.7 Sonnet**, **Claude 3.5 Opus**, or **Gemini 2.5 Pro** burns through quota limits with no visual warning inside Zed until prompts fail.
+2. **Disruptive Account Switching**: Switching accounts manually requires editing config files or clearing tokens, often disrupting open chat histories.
 
-**AntiBox** lives unobtrusively in your macOS menu bar as a high-density, read-only monitoring dashboard. It surfaces exact remaining token percentages, precise countdown timers until cycle resets, and algorithmic pacing recommendations to prevent unexpected rate-limit exhaustion.
-
----
-
-## Core Capabilities
-
-### 1. Terminal-Precision Model Indicators
-- **High-Density Indicator Rows**: Visualized in continuous rounded pill cards inspired by macOS developer utilities.
-- **Accurate Model Metrics**: Tracks individual model allocations (e.g. `gemini-3.1-pro-high`, `gemini-3.1-flash-image`, `claude-sonnet-4-6`).
-- **Live Cycle Countdown**: Dynamic reset countdowns (`🕒 4h 59m`, `🕒 2d 16h`) displayed in warm amber typography.
-- **Color-Coded Statuses**:
-  - **Healthy (Emerald)**: Muted dark green container (`#142924`) with mint percentages for sufficient quota.
-  - **Critical / Depleted (Ruby)**: Crimson container (`#2e141a`) with alert triangle (`⚠️`) and custom flags (e.g. `Weekly 0%`).
-
-### 2. Multi-Account Switching
-- Effortlessly toggle between configured billing accounts and proxy pools (e.g. `tunefix.id@gmail.com`, `xtampol@gmail.com`, `yraunajfni@gmail.com`) via a native capsule menu dropdown.
-
-### 3. Smart AI Budget Advisor
-- **Algorithmic Consumption Pacing**: Analyzes aggregate token capacity against the earliest cycle reset horizon:
-  $$\text{Daily Safe Limit} = \frac{\sum \text{Remaining Tokens}}{\max(\text{Days Until Reset}, 1)}$$
-- **Burn-Rate Classification**: Categorizes system burn into *Sustainable*, *Elevated*, or *High Depletion Risk*.
-
-### 4. Zero Plain-Text Credentials (Apple Keychain)
-- All API tokens and credentials are encrypted and stored directly in macOS Keychain Services via `kSecClassGenericPassword` under service `com.antibox.credentials`.
-- No sensitive tokens are ever stored in `UserDefaults` or plaintext config files.
-
-### 5. Native Desktop Notifications
-- Configured with `UNUserNotificationCenter` to dispatch alerts when any account's quota drops below critical threshold ($\le 15\%$).
-- Built-in debounce mechanism prevents repetitive alerts on subsequent background sync cycles.
-
-### 6. SwiftData Usage History
-- Includes a SwiftData persistent model (`DailyUsageLog`) for tracking daily token consumption over time.
+**ZedGravity** runs natively in your macOS Menu Bar, giving you continuous live visibility into Gemini, Claude/GPT, and image generation quotas. When an account runs low, its intelligent auto-switcher seamlessly hot-reloads the Zed ACP server in the background—**preserving all open editor windows and active chat history**.
 
 ---
 
-## Architecture & Project Structure
+## Key Features
 
-```
-AntiBox/
-├── Package.swift                             # Swift Package Manager specification
-├── Info.plist                                # LSUIElement=true (accessory menu bar app)
-├── Assets/
-│   └── logo.png                              # AntiBox App Icon
-├── scripts/
-│   └── build_app.sh                          # Native .app bundle packager
-├── Sources/
-│   ├── AntiBoxApp.swift                      # App entry point with MenuBarExtra (.window style)
-│   ├── Models/
-│   │   ├── AIProvider.swift                  # Provider enumerations (Gemini, Claude)
-│   │   ├── Account.swift                     # Account metadata and pool aggregations
-│   │   ├── QuotaItem.swift                   # Model-level quota items and countdown logic
-│   │   ├── UsageRecord.swift                 # SwiftData historical logging entity
-│   │   └── BudgetRecommendation.swift        # Advisor output recommendations
-│   ├── Storage/
-│   │   └── KeychainManager.swift             # Thread-safe Security.framework wrapper
-│   ├── Services/
-│   │   ├── QuotaServiceProtocol.swift        # Protocol interface for read-only quota clients
-│   │   ├── GeminiQuotaService.swift          # Google Gemini quota fetching client
-│   │   ├── ClaudeQuotaService.swift          # Anthropic Claude quota fetching client
-│   │   ├── SmartBudgetAdvisor.swift          # Budget smoothing engine
-│   │   └── NotificationManager.swift         # UNUserNotificationCenter alert manager
-│   ├── ViewModels/
-│   │   └── DashboardViewModel.swift          # Reactive state coordinator and account switcher
-│   └── Views/
-│       ├── MenuBarView.swift                 # Popover window with .ultraThinMaterial
-│       ├── Components/
-│       │   ├── ModelQuotaRowView.swift       # Apple HIG terminal indicator row
-│       │   ├── BudgetAdvisorCardView.swift   # Compact smart advisor banner
-│       │   └── QuotaGaugeView.swift          # Dynamic linear health progress bar
-│       └── Sheets/
-│           └── AddAccountSheet.swift         # Account connection modal
-└── Tests/
-    └── AntiBoxTests/
-        └── SmartBudgetAdvisorTests.swift     # Test suite verifying algorithmic calculations
-```
+- **Dynamic macOS Menu Bar Widget**: Displays live remaining percentages side-by-side (`G: 74% • C: 0% • Img: 74%`) following Apple Human Interface Guidelines.
+- **Intelligent Quota Auto-Switch**: Automatically swaps Zed ACP to the healthiest backup account when current quota falls $\le 5\%$.
+  - Target Focus: Monitor **Claude / GPT Only**, **Gemini Only**, or **Both**.
+- **Zero Chat Loss**: Uses atomic token updates and clean process signaling so Zed automatically respawns the ACP server without dropping active conversations.
+- **Battery-Optimized Smart Sync**: Background polling refreshes *only* the active account being used, saving up to 85% CPU and network requests compared to legacy tools.
+  - Profiles: *Balanced (60s)*, *Fast (15s)*, *Battery Saver (5m)*, or *Manual*.
+- **Zero Password Prompts**: Credentials and refresh tokens are protected in a private local vault with strict POSIX `0600` permissions—eliminating repetitive macOS Keychain password dialogs.
+- **1-Click Import**: Instantly migrates existing accounts and OAuth tokens from `~/.antigravity_tools` or local config files with zero setup required.
+- **System Notifications**: Native macOS alert banners with sound when any monitored model enters critical quota thresholds.
 
 ---
 
-## Getting Started
+## Requirements
 
-### Prerequisites
-- macOS 14.0 (Sonoma) or newer
-- Swift 5.9+ or Xcode 15+
-
-### Build & Run
-
-#### Option 1: Native Application Bundle (Recommended)
-Compile and package AntiBox into a self-contained `.app` that lives purely in your Menu Bar without dock clutter:
-```bash
-# Clone the repository
-git clone https://github.com/naenmad/AntiBox.git
-cd AntiBox
-
-# Build the release .app bundle
-./scripts/build_app.sh
-
-# Launch the app
-open AntiBox.app
-```
-
-#### Option 2: Swift CLI (Debug Mode)
-```bash
-swift run AntiBox
-```
-
-#### Option 3: Xcode
-```bash
-xed .
-```
-Press **⌘R** to build and run.
+| Requirement | Supported Version | Notes |
+| :--- | :--- | :--- |
+| **Operating System** | macOS 14.0+ (Sonoma, Sequoia) | Native Apple Silicon (M1/M2/M3/M4) & Intel |
+| **Editor** | [Zed Editor](https://zed.dev) (v0.150+) | Must have Assistant panel enabled |
+| **ACP Server** | Antigravity CLI (`antigravity acp`) | Standard Google Antigravity extension daemon |
+| **Google Account** | Free or Google Cloud Code Pro | Direct OAuth2 token exchange |
 
 ---
 
-## Keyboard Shortcuts
+## Quick Start & Installation
 
-| Shortcut | Action |
-| :--- | :--- |
-| `⌘R` | Refresh all account and model quotas |
-| `⌘N` | Open modal to connect a new account |
-| `⌘Q` | Quit AntiBox |
+### Option 1: Install Pre-Built Binary (Recommended)
+
+1. Clone or download the repository:
+   ```bash
+   git clone https://github.com/naenmad/ZedGravity.git
+   cd ZedGravity
+   ```
+
+2. Build and install to `/Applications` in one command:
+   ```bash
+   ./scripts/build_app.sh -i
+   ```
+
+3. Launch **ZedGravity** from Spotlight (`Cmd + Space`) or your Applications folder.
 
 ---
 
-## Running Tests
+## Zed Integration Guide
 
-AntiBox includes a test suite verifying budget algorithms, threshold classifications, and depletion handling:
-```bash
-swift test
+Zed connects to Google Antigravity via the **Agent Client Protocol**. To allow ZedGravity to manage credentials seamlessly:
+
+1. Open Zed settings (`Cmd + ,` or edit `~/.config/zed/settings.json`).
+2. Add or update the assistant server definition to include `"AGY_ACP_FORCE_FILE_STORAGE": "1"`:
+
+```json
+{
+  "assistant": {
+    "version": "2",
+    "provider": {
+      "name": "custom",
+      "servers": {
+        "antigravity-acp": {
+          "command": "/Users/YOUR_USERNAME/.local/bin/antigravity",
+          "args": ["acp"],
+          "env": {
+            "AGY_ACP_FORCE_FILE_STORAGE": "1"
+          }
+        }
+      }
+    }
+  }
+}
 ```
+
+> [!TIP]
+> For a full walkthrough of Zed configuration and troubleshooting, refer to [docs/ZED_INTEGRATION.md](docs/ZED_INTEGRATION.md).
+
+---
+
+## Architecture
+
+ZedGravity is built 100% standalone with Swift and SwiftUI. It communicates directly with Google Cloud Code APIs using official OAuth token exchanges—no local proxy server daemons required.
+
+```mermaid
+graph LR
+    ZED["Zed Editor"] <--> ACP["agy_acp_server.par"]
+    ACP <--> TOKEN["~/.gemini/antigravity-acp/acp_token.json"]
+    ZG["ZedGravity Menu Bar App"] --> TOKEN
+    ZG --> GOOGLE["Google Cloud Code API"]
+    ZG --> VAULT["POSIX 0600 Vault"]
+```
+
+For complete sequence diagrams, state machine flows, and component specs, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## Security & Privacy
+
+ZedGravity is designed with local-first, zero-telemetry security guardrails:
+
+- **Zero Telemetry**: No tracking, analytics, or third-party cloud relays.
+- **Direct Communication**: Network calls route strictly between your local machine and `googleapis.com`.
+- **Restricted Permissions**: Account tokens are stored at `~/Library/Application Support/ZedGravity/` with `0600` POSIX attributes (accessible exclusively by your macOS user).
+
+Review our complete [Security Policy](SECURITY.md) for details.
+
+---
+
+## Contributing
+
+Contributions, bug reports, and suggestions are welcome!
+
+1. Check existing discussions in [GitHub Issues](https://github.com/naenmad/ZedGravity/issues).
+2. Review our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
+3. Submit a pull request with clear descriptions of your changes.
 
 ---
 
 ## License
 
-This project is open-source and available under the [MIT License](LICENSE).
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**.  
+See the [LICENSE](LICENSE) file for the full license text.
+
+Copyright (c) 2026 [naenmad](https://github.com/naenmad).

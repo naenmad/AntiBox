@@ -143,6 +143,14 @@ public struct Account: Identifiable, Codable, Hashable, Sendable {
         return min(max(fraction * 100.0, 0.0), 100.0)
     }
 
+    public var effectiveQuotaPercentage: Double {
+        if !quotas.isEmpty {
+            let activeModelPercentages = quotas.map { $0.remainingPercentage }
+            return activeModelPercentages.min() ?? remainingPercentage
+        }
+        return remainingPercentage
+    }
+
     public var status: QuotaStatus {
         let pct = remainingPercentage
         if pct <= 15.0 {

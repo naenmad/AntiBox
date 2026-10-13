@@ -57,7 +57,7 @@ public struct MenuBarView: View {
 
     private var headerView: some View {
         HStack(spacing: 8) {
-            Text("AntiBox")
+            Text("ZedGravity")
                 .font(.system(size: 13, weight: .bold))
 
             Spacer()
@@ -78,7 +78,7 @@ public struct MenuBarView: View {
             // Refresh Button (⌘R)
             Button {
                 Task {
-                    await viewModel.refreshAllQuotas()
+                    await viewModel.refreshAllQuotas(activeAccountOnly: false)
                 }
             } label: {
                 if viewModel.isLoading {
@@ -115,20 +115,33 @@ public struct MenuBarView: View {
     private var accountSwitcherBar: some View {
         HStack {
             Menu {
-                Section("Accounts") {
+                Section("Switch Zed ACP Account") {
+                    ForEach(viewModel.accounts) { account in
+                        let isZedActive = account.email.lowercased() == (viewModel.activeZedACPEmail ?? "").lowercased()
+                        Button {
+                            Task {
+                                await viewModel.switchZedACP(to: account.id)
+                            }
+                        } label: {
+                            HStack {
+                                Text(account.email.isEmpty ? account.name : account.email)
+                                Text("(\(account.accountTier.displayName))")
+                                if isZedActive {
+                                    Text("• Active in Zed")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Section("Switch Antigravity IDE") {
                     ForEach(viewModel.accounts) { account in
                         Button {
                             Task {
                                 await viewModel.switchAntigravityIDE(to: account.id)
                             }
                         } label: {
-                            HStack {
-                                Text(account.email.isEmpty ? account.name : account.email)
-                                Text("(\(account.accountTier.displayName))")
-                                if account.id == viewModel.selectedAccount?.id {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
+                            Text(account.email.isEmpty ? account.name : account.email)
                         }
                     }
                 }
@@ -183,15 +196,24 @@ public struct MenuBarView: View {
 
             Spacer()
 
-            if viewModel.isSwitchingIDE {
+            if viewModel.isSwitchingZedACP || viewModel.isSwitchingIDE {
                 ProgressView()
                     .scaleEffect(0.5)
                     .frame(width: 14, height: 14)
-            } else if let msg = viewModel.ideSwitchStatusMessage {
+            } else if let msg = viewModel.zedACPSwitchStatusMessage {
                 Text(msg)
                     .font(.system(size: 9.5, weight: .medium))
-                    .foregroundColor(.green)
+                    .foregroundColor(viewModel.isZedACPSwitchSuccess ? .green : .red)
                     .lineLimit(1)
+            } else if viewModel.activeZedACPEmail != nil {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(viewModel.isZedACPRunning ? Color.green : Color.orange)
+                        .frame(width: 5, height: 5)
+                    Text("Zed ACP")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }

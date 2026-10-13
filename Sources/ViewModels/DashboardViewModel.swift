@@ -19,19 +19,12 @@ public final class DashboardViewModel: ObservableObject {
     private let directEngine = DirectCloudCodeEngine.shared
     private let accountStore = AntiBoxAccountStore.shared
 
-    public enum EngineMode: String, CaseIterable, Identifiable {
-        case direct = "Native Direct Engine (Independent)"
-        case hybrid = "Hybrid (Direct + Local Sync)"
-        case localStore = "Local Antigravity Tools (Legacy)"
-        public var id: String { rawValue }
-    }
-
-    @Published public var engineMode: EngineMode = .direct
-    @Published public var autoRefreshIntervalSeconds: Double = 60.0
+    @Published public var syncFrequency: SyncFrequency = .balanced
+    @Published public var autoRotateFocus: AutoSwitchQuotaFocus = .claude
     @Published public var notifyLowQuota: Bool = true
     @Published public var lowQuotaThreshold: Double = 15.0
     @Published public var trackImageQuota: Bool = true
-    @Published public var standaloneStatus: String = "100% Standalone (Direct to Google Cloud API)"
+    @Published public var importStatusMessage: String? = nil
 
     private let independentEngine = IndependentQuotaEngine.shared
     private let accountsStorageKey = "com.antibox.saved_accounts_v3"
@@ -51,6 +44,35 @@ public final class DashboardViewModel: ObservableObject {
     }
     @Published public var menuBarShowImage: Bool = false {
         didSet { UserDefaults.standard.set(menuBarShowImage, forKey: "com.antibox.bar_show_image") }
+    }
+
+    /// Single compact formatted text string for macOS MenuBarExtra label
+    public var menuBarSummaryText: String {
+        guard let account = selectedAccount else { return "AntiBox" }
+        var parts: [String] = []
+
+        if menuBarShowGemini {
+            let pct = Int(account.remainingPercentage)
+            parts.append("G: \(pct)%")
+        }
+
+        if menuBarShowClaudeGpt {
+            let tpGroup = currentQuotaGroups.first(where: { $0.id == "claude-gpt" })
+            let pct = Int(tpGroup?.percentage ?? 0.0)
+            parts.append("C: \(pct)%")
+        }
+
+        if menuBarShowImage {
+            let imgPct = account.imageQuotaPercentage ?? currentQuotaGroups.first(where: { $0.id == "gemini" })?.imageQuota?.percentage
+            if let p = imgPct {
+                parts.append("Img: \(Int(p))%")
+            }
+        }
+
+        if parts.isEmpty {
+            return "\(Int(account.remainingPercentage))%"
+        }
+        return parts.joined(separator: " • ")
     }
 
     public var menuBarActiveMetrics: [MenuBarMetricItem] {
@@ -84,6 +106,15 @@ public final class DashboardViewModel: ObservableObject {
     @Published public var isSwitchingIDE: Bool = false
     public let ideSyncService = AntigravityIDESyncService.shared
 
+    // Zed IDE (Antigravity ACP) Synchronization State
+    @Published public var activeZedACPEmail: String? = nil
+    @Published public var isZedACPRunning: Bool = false
+    @Published public var isSwitchingZedACP: Bool = false
+    @Published public var zedACPSwitchStatusMessage: String? = nil
+    @Published public var isZedACPSwitchSuccess: Bool = true
+    @Published public var autoRotateZedACPEnabled: Bool = false
+    public let zedACPSyncService = ZedACPSyncService.shared
+
     private var secondTimer: AnyCancellable?
     private var syncTimer: AnyCancellable?
 
@@ -91,11 +122,21 @@ public final class DashboardViewModel: ObservableObject {
         self.menuBarShowGemini = UserDefaults.standard.object(forKey: "com.antibox.bar_show_gemini") as? Bool ?? true
         self.menuBarShowClaudeGpt = UserDefaults.standard.object(forKey: "com.antibox.bar_show_claude_gpt") as? Bool ?? true
         self.menuBarShowImage = UserDefaults.standard.object(forKey: "com.antibox.bar_show_image") as? Bool ?? false
+        self.autoRotateZedACPEnabled = UserDefaults.standard.object(forKey: "com.antibox.auto_rotate_zed_acp") as? Bool ?? false
+        if let freqRaw = UserDefaults.standard.string(forKey: "com.antibox.sync_frequency"),
+           let freq = SyncFrequency(rawValue: freqRaw) {
+            self.syncFrequency = freq
+        }
+        if let focusRaw = UserDefaults.standard.string(forKey: "com.antibox.auto_rotate_focus"),
+           let focus = AutoSwitchQuotaFocus(rawValue: focusRaw) {
+            self.autoRotateFocus = focus
+        }
 
         notificationManager.requestAuthorization()
         loadInitialData()
         startRealtimeTickers()
         checkActiveIDEAccount()
+        checkActiveZedACP()
     }
 
     deinit {
@@ -108,13 +149,17 @@ public final class DashboardViewModel: ObservableObject {
         let stored = accountStore.loadAccounts()
         if !stored.isEmpty {
             self.accounts = stored
-            self.selectedAccountId = stored.first?.id
+            let (zedEmail, matchedAcc) = zedACPSyncService.getActiveAccount(from: stored)
+            self.activeZedACPEmail = zedEmail
+            self.selectedAccountId = matchedAcc?.id ?? stored.first?.id
         } else {
             // First run: migrate accounts once into AntiBox independent store
             let migration = accountStore.migrateFromAntigravityTools()
             if migration.success {
                 self.accounts = accountStore.loadAccounts()
-                self.selectedAccountId = accounts.first?.id
+                let (zedEmail, matchedAcc) = zedACPSyncService.getActiveAccount(from: self.accounts)
+                self.activeZedACPEmail = zedEmail
+                self.selectedAccountId = matchedAcc?.id ?? accounts.first?.id
             } else if syncService.isAvailable, let localSync = syncService.syncFromLocalStore() {
                 self.accounts = localSync.accounts
                 self.selectedAccountId = localSync.currentAccountId ?? accounts.first?.id
@@ -130,34 +175,61 @@ public final class DashboardViewModel: ObservableObject {
         recalculateBudget()
     }
 
-    private func startRealtimeTickers() {
+    public func startRealtimeTickers() {
         // Live 1-second countdown clock ticker
+        secondTimer?.cancel()
         secondTimer = Timer.publish(every: 1.0, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] now in
-                self?.currentTime = now
-            }
-
-        // Live 30-second direct synchronizer
-        syncTimer = Timer.publish(every: 30.0, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                Task { [weak self] in
-                    await self?.refreshAllQuotas()
+                guard let self = self else { return }
+                self.currentTime = now
+                // Periodic background check of active IDE / ACP state every 5 seconds
+                if Int(now.timeIntervalSince1970) % 5 == 0 {
+                    self.checkActiveZedACP()
+                    self.checkActiveIDEAccount()
                 }
             }
+
+        syncTimer?.cancel()
+        if let interval = syncFrequency.intervalSeconds {
+            syncTimer = Timer.publish(every: interval, on: .main, in: .common)
+                .autoconnect()
+                .sink { [weak self] _ in
+                    Task { [weak self] in
+                        // Background sync refreshes only the active account to save power & quota
+                        await self?.refreshAllQuotas(activeAccountOnly: true)
+                    }
+                }
+        }
+    }
+
+    public func updateSyncFrequency(_ frequency: SyncFrequency) {
+        self.syncFrequency = frequency
+        UserDefaults.standard.set(frequency.rawValue, forKey: "com.antibox.sync_frequency")
+        startRealtimeTickers()
+    }
+
+    public func setAutoRotateFocus(_ focus: AutoSwitchQuotaFocus) {
+        self.autoRotateFocus = focus
+        UserDefaults.standard.set(focus.rawValue, forKey: "com.antibox.auto_rotate_focus")
     }
 
     private func performBackgroundSync() {
         Task {
-            await refreshAllQuotas()
+            await refreshAllQuotas(activeAccountOnly: true)
         }
     }
 
     /// Currently active account for focused model quota inspection
     public var selectedAccount: Account? {
-        if let id = selectedAccountId {
-            return accounts.first(where: { $0.id == id }) ?? accounts.first
+        if let id = selectedAccountId, let acc = accounts.first(where: { $0.id == id }) {
+            return acc
+        }
+        if let zedEmail = activeZedACPEmail, let acc = accounts.first(where: { $0.email.lowercased() == zedEmail.lowercased() }) {
+            return acc
+        }
+        if let ideEmail = activeIDEAccountEmail, let acc = accounts.first(where: { $0.email.lowercased() == ideEmail.lowercased() }) {
+            return acc
         }
         return accounts.first
     }
@@ -243,7 +315,7 @@ public final class DashboardViewModel: ObservableObject {
 
     // MARK: - Quota Refresh
 
-    public func refreshAllQuotas() async {
+    public func refreshAllQuotas(activeAccountOnly: Bool = false) async {
         isLoading = true
         errorMessage = nil
 
@@ -253,74 +325,103 @@ public final class DashboardViewModel: ObservableObject {
             saveAccounts()
         }
 
-        // Direct standalone communication with Google Cloud Code API (No Antigravity Tools required)
-        if engineMode == .direct || engineMode == .hybrid {
-            var updated = self.accounts
-            var directSuccess = false
+        var updated = self.accounts
+        let targetIndices: [Int]
+        if activeAccountOnly, let current = selectedAccount, let idx = updated.firstIndex(where: { $0.id == current.id }) {
+            targetIndices = [idx]
+        } else {
+            targetIndices = Array(0..<updated.count)
+        }
 
-            for i in 0..<updated.count {
-                let acc = updated[i]
-                guard acc.isActive else { continue }
+        for i in targetIndices {
+            let acc = updated[i]
+            guard acc.isActive else { continue }
 
-                // Check Keychain for OAuth refresh token
-                if let refreshToken = try? keychainManager.retrieve(forAccount: acc.id), !refreshToken.isEmpty {
-                    do {
-                        let accessToken = try await directEngine.refreshAccessToken(refreshToken: refreshToken)
-                        let directRes = try await directEngine.fetchDirectQuotas(accessToken: accessToken)
+            // Check Keychain for OAuth refresh token
+            if let refreshToken = try? keychainManager.retrieve(forAccount: acc.id), !refreshToken.isEmpty {
+                do {
+                    let accessToken = try await directEngine.refreshAccessToken(refreshToken: refreshToken)
+                    let directRes = try await directEngine.fetchDirectQuotas(accessToken: accessToken)
 
-                        updated[i].customRemainingPercentage = directRes.geminiWeeklyPercentage
-                        updated[i].resetDate = directRes.geminiResetDate
-                        updated[i].imageQuotaPercentage = directRes.imageQuotaPercentage
-                        updated[i].imageQuotaResetDate = directRes.imageQuotaResetDate
-                        if let imgDate = directRes.imageQuotaResetDate {
-                            updated[i].imageQuotaCountdown = Account.formatCountdown(from: imgDate, at: currentTime)
-                        }
-                        if !directRes.models.isEmpty {
-                            updated[i].quotas = directRes.models
-                        }
-                        directSuccess = true
-                    } catch {
-                        print("[AntiBox] Direct Google API sync failed for \(acc.email): \(error)")
+                    updated[i].customRemainingPercentage = directRes.geminiWeeklyPercentage
+                    updated[i].resetDate = directRes.geminiResetDate
+                    updated[i].imageQuotaPercentage = directRes.imageQuotaPercentage
+                    updated[i].imageQuotaResetDate = directRes.imageQuotaResetDate
+                    if let imgDate = directRes.imageQuotaResetDate {
+                        updated[i].imageQuotaCountdown = Account.formatCountdown(from: imgDate, at: currentTime)
                     }
-                } else if let apiKey = try? keychainManager.retrieve(forAccount: acc.id), !apiKey.isEmpty {
-                    if acc.provider == .gemini {
-                        if let live = try? await independentEngine.fetchGeminiDirectQuota(apiKey: apiKey) {
-                            updated[i].quotas = live
-                        }
-                    } else {
-                        if let live = try? await independentEngine.fetchClaudeDirectQuota(apiKey: apiKey) {
-                            updated[i].quotas = live
-                        }
+                    if !directRes.models.isEmpty {
+                        updated[i].quotas = directRes.models
+                    }
+                } catch {
+                    print("[AntiBox] Direct Google API sync failed for \(acc.email): \(error)")
+                }
+            } else if let apiKey = try? keychainManager.retrieve(forAccount: acc.id), !apiKey.isEmpty {
+                if acc.provider == .gemini {
+                    if let live = try? await independentEngine.fetchGeminiDirectQuota(apiKey: apiKey) {
+                        updated[i].quotas = live
+                    }
+                } else {
+                    if let live = try? await independentEngine.fetchClaudeDirectQuota(apiKey: apiKey) {
+                        updated[i].quotas = live
                     }
                 }
             }
+        }
 
-            if directSuccess {
-                self.accounts = updated
-                standaloneStatus = "Active: Direct Standalone Google Cloud API"
-                return
+        self.accounts = updated
+
+        if notifyLowQuota {
+            for account in accounts where account.isActive {
+                notificationManager.evaluateQuotaThreshold(for: account, threshold: lowQuotaThreshold)
             }
         }
 
-        // Fallback only if local proxy is present and direct credentials not yet configured
-        if syncService.isAvailable, let localSync = syncService.syncFromLocalStore() {
-            self.accounts = localSync.accounts
-        }
-
-        for account in accounts where account.isActive {
-            notificationManager.evaluateQuotaThreshold(for: account)
+        // Auto-Rotate Zed ACP if active account has depleted/low quota (<= 5%)
+        if autoRotateZedACPEnabled {
+            let (rotated, oldEmail, newEmail, reason) = await zedACPSyncService.checkAndAutoRotateIfNeeded(
+                accounts: self.accounts,
+                focus: autoRotateFocus,
+                thresholdPercent: 5.0
+            )
+            if rotated, let old = oldEmail, let new = newEmail {
+                if let newAcc = accounts.first(where: { $0.email.lowercased() == new.lowercased() }) {
+                    self.selectedAccountId = newAcc.id
+                }
+                checkActiveZedACP()
+                let reasonText = reason ?? "quota depleted"
+                zedACPSwitchStatusMessage = "Auto-Switched to \(new) (\(reasonText))"
+                notificationManager.notifyAutoSwitched(oldEmail: old, newEmail: new, reason: reasonText)
+                Task {
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    if self.zedACPSwitchStatusMessage?.contains("Auto-Switched") == true {
+                        self.zedACPSwitchStatusMessage = nil
+                    }
+                }
+            }
         }
     }
 
-    public func detachFromAntigravityTools() {
+    public func importAccountsFromAntigravityTools() {
         let migration = accountStore.migrateFromAntigravityTools()
         if migration.success {
             self.accounts = accountStore.loadAccounts()
-            self.engineMode = .direct
-            standaloneStatus = "100% Standalone (Migrated \(migration.importedCount) accounts)"
-            Task {
-                await refreshAllQuotas()
+            let (zedEmail, matchedAcc) = zedACPSyncService.getActiveAccount(from: self.accounts)
+            self.activeZedACPEmail = zedEmail
+            if self.selectedAccountId == nil {
+                self.selectedAccountId = matchedAcc?.id ?? accounts.first?.id
             }
+            importStatusMessage = "Successfully imported \(migration.importedCount) accounts!"
+            Task {
+                await refreshAllQuotas(activeAccountOnly: false)
+            }
+        } else {
+            importStatusMessage = "No accounts found in ~/.antigravity_tools."
+        }
+
+        Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            self.importStatusMessage = nil
         }
     }
 
@@ -328,6 +429,7 @@ public final class DashboardViewModel: ObservableObject {
 
     public func selectAccount(id: UUID) {
         selectedAccountId = id
+        recalculateBudget()
     }
 
     public func checkActiveIDEAccount() {
@@ -345,12 +447,60 @@ public final class DashboardViewModel: ObservableObject {
         isSwitchingIDE = false
         ideSwitchStatusMessage = result.message
         checkActiveIDEAccount()
+        recalculateBudget()
 
         // Clear status message after 4 seconds
         Task {
             try? await Task.sleep(nanoseconds: 4_000_000_000)
             if self.ideSwitchStatusMessage == result.message {
                 self.ideSwitchStatusMessage = nil
+            }
+        }
+    }
+
+    // MARK: - Zed IDE (Antigravity ACP) Management
+
+    public func checkActiveZedACP() {
+        self.isZedACPRunning = zedACPSyncService.isZedACPRunning
+        let (email, matchedAccount) = zedACPSyncService.getActiveAccount(from: accounts)
+        self.activeZedACPEmail = email
+        if selectedAccountId == nil {
+            if let matched = matchedAccount {
+                self.selectedAccountId = matched.id
+                recalculateBudget()
+            } else if let email = email, let matched = accounts.first(where: { $0.email.lowercased() == email.lowercased() }) {
+                self.selectedAccountId = matched.id
+                recalculateBudget()
+            }
+        }
+    }
+
+    public func toggleAutoRotateZedACP() {
+        autoRotateZedACPEnabled.toggle()
+        UserDefaults.standard.set(autoRotateZedACPEnabled, forKey: "com.antibox.auto_rotate_zed_acp")
+    }
+
+    /// Hot-switches Zed Antigravity ACP directly to the target account credentials
+    public func switchZedACP(to accountId: UUID) async {
+        guard let account = accounts.first(where: { $0.id == accountId }) else { return }
+        isSwitchingZedACP = true
+        self.selectedAccountId = accountId
+        self.activeZedACPEmail = account.email.isEmpty ? account.name : account.email
+        recalculateBudget()
+
+        let result = await zedACPSyncService.switchToAccount(account: account)
+        isSwitchingZedACP = false
+        isZedACPSwitchSuccess = result.success
+        zedACPSwitchStatusMessage = result.message
+        self.selectedAccountId = accountId
+        checkActiveZedACP()
+        recalculateBudget()
+
+        // Clear status message after 4 seconds
+        Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if self.zedACPSwitchStatusMessage == result.message {
+                self.zedACPSwitchStatusMessage = nil
             }
         }
     }

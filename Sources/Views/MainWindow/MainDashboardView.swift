@@ -103,10 +103,9 @@ public struct MainDashboardView: View {
                 .background(Color.primary.opacity(0.04))
                 .clipShape(Capsule())
 
-                // Refresh Button
                 Button {
                     Task {
-                        await viewModel.refreshAllQuotas()
+                        await viewModel.refreshAllQuotas(activeAccountOnly: false)
                     }
                 } label: {
                     if viewModel.isLoading {
@@ -168,19 +167,6 @@ public struct MainDashboardView: View {
 
                     Spacer()
 
-                    // Realtime Active Indicator
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 6, height: 6)
-                        Text("Live Engine Active")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3.5)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(Capsule())
                 }
 
                 // 2 Core Category Cards (Gemini vs Claude/GPT-OSS)
@@ -608,7 +594,41 @@ public struct MainDashboardView: View {
 
                 Spacer()
 
-                if let ideEmail = viewModel.activeIDEAccountEmail {
+                // Zed ACP Auto-Rotate Toggle
+                Button {
+                    viewModel.toggleAutoRotateZedACP()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: viewModel.autoRotateZedACPEnabled ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath.circle")
+                            .font(.system(size: 11))
+                        Text(viewModel.autoRotateZedACPEnabled ? "Auto-Rotate: ON (\(viewModel.autoRotateFocus.displayName))" : "Auto-Rotate: OFF")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundColor(viewModel.autoRotateZedACPEnabled ? Color.green : Color.secondary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(viewModel.autoRotateZedACPEnabled ? Color.green.opacity(0.12) : Color.white.opacity(0.04))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Automatically switch Zed ACP to the healthiest account when current quota falls <= 5%")
+
+                // Active in Zed ACP Badge
+                if let zedEmail = viewModel.activeZedACPEmail {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(viewModel.isZedACPRunning ? Color.green : Color.orange)
+                            .frame(width: 6, height: 6)
+                        Text("Active in Zed ACP: \(zedEmail)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(Capsule())
+                    .help(viewModel.isZedACPRunning ? "Zed ACP server is running" : "Zed ACP credential configured")
+                } else if let ideEmail = viewModel.activeIDEAccountEmail {
                     HStack(spacing: 5) {
                         Circle()
                             .fill(Color.green)
@@ -630,24 +650,42 @@ public struct MainDashboardView: View {
             }
             .padding([.horizontal, .top], 22)
 
-            // Switch Toast Banner
-            if let msg = viewModel.ideSwitchStatusMessage {
+            // Zed ACP Switch Toast Banner
+            if let msg = viewModel.zedACPSwitchStatusMessage {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                    Image(systemName: viewModel.isZedACPSwitchSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundColor(viewModel.isZedACPSwitchSuccess ? .green : .red)
                     Text(msg)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.primary)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.green.opacity(0.12))
+                .background((viewModel.isZedACPSwitchSuccess ? Color.green : Color.red).opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 22)
+                .transition(.opacity)
+            }
+
+            // Antigravity IDE Switch Toast Banner
+            if let msg = viewModel.ideSwitchStatusMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(.blue)
+                    Text(msg)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .padding(.horizontal, 22)
                 .transition(.opacity)
             }
 
             List(viewModel.accounts) { account in
+                let isZedActive = (account.email.lowercased() == (viewModel.activeZedACPEmail ?? "").lowercased())
                 let isIDEActive = (account.email.lowercased() == (viewModel.activeIDEAccountEmail ?? "").lowercased())
 
                 HStack(spacing: 12) {
@@ -677,17 +715,29 @@ public struct MainDashboardView: View {
                             .background(account.accountTier.color.opacity(0.12))
                             .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
 
-                            if isIDEActive {
+                            if isZedActive {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "bolt.shield.fill")
+                                        .font(.system(size: 7))
+                                    Text("ZED ACP")
+                                        .font(.system(size: 8.5, weight: .bold))
+                                }
+                                .foregroundColor(.green)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.green.opacity(0.15))
+                                .clipShape(Capsule())
+                            } else if isIDEActive {
                                 HStack(spacing: 3) {
                                     Image(systemName: "bolt.fill")
                                         .font(.system(size: 7))
                                     Text("IDE ACTIVE")
                                         .font(.system(size: 8.5, weight: .bold))
                                 }
-                                .foregroundColor(.green)
+                                .foregroundColor(.blue)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
-                                .background(Color.green.opacity(0.12))
+                                .background(Color.blue.opacity(0.12))
                                 .clipShape(Capsule())
                             }
                         }
@@ -712,29 +762,29 @@ public struct MainDashboardView: View {
                         .foregroundColor(account.status.color)
                         .frame(width: 45, alignment: .trailing)
 
-                    // Switch Antigravity IDE button
+                    // Primary Switch Zed ACP button
                     Button {
                         Task {
-                            await viewModel.switchAntigravityIDE(to: account.id)
+                            await viewModel.switchZedACP(to: account.id)
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            if viewModel.isSwitchingIDE && account.id == viewModel.selectedAccount?.id {
+                            if viewModel.isSwitchingZedACP && account.id == viewModel.selectedAccount?.id {
                                 ProgressView()
                                     .scaleEffect(0.5)
                                     .frame(width: 12, height: 12)
                             } else {
-                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Image(systemName: isZedActive ? "checkmark.circle.fill" : "bolt.fill")
                                     .font(.system(size: 10))
                             }
-                            Text(isIDEActive ? "IDE Active" : "Switch IDE")
+                            Text(isZedActive ? "Active in Zed" : "Switch Zed ACP")
                                 .font(.system(size: 11, weight: .medium))
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(isIDEActive ? Color.gray.opacity(0.35) : Color.accentColor)
-                    .disabled(viewModel.isSwitchingIDE)
-                    .help("Directly switch open Antigravity IDE to use this account")
+                    .tint(isZedActive ? Color.green.opacity(0.3) : Color.blue)
+                    .disabled(viewModel.isSwitchingZedACP || isZedActive)
+                    .help("Switch Zed IDE's Antigravity ACP to use this account")
 
                     // Delete Account Button
                     Button(role: .destructive) {
@@ -746,11 +796,22 @@ public struct MainDashboardView: View {
                             .foregroundColor(.red.opacity(0.8))
                     }
                     .buttonStyle(.plain)
-                    .help("Delete this account from AntiBox")
+                    .help("Delete this account from ZedGravity")
                 }
                 .padding(.vertical, 6)
                 .listRowBackground(Color.white.opacity(0.02))
                 .contextMenu {
+                    Button("Switch Zed ACP") {
+                        Task {
+                            await viewModel.switchZedACP(to: account.id)
+                        }
+                    }
+                    Button("Switch Antigravity IDE") {
+                        Task {
+                            await viewModel.switchAntigravityIDE(to: account.id)
+                        }
+                    }
+                    Divider()
                     Button(account.id == viewModel.selectedAccount?.id ? "Currently Active" : "Set as Active") {
                         viewModel.selectAccount(id: account.id)
                     }
@@ -774,12 +835,12 @@ public struct MainDashboardView: View {
     private var settingsView: some View {
         Form {
             Section("General & System Startup") {
-                Toggle("Launch AntiBox at Login", isOn: Binding(
+                Toggle("Launch ZedGravity at Login", isOn: Binding(
                     get: { launchManager.isEnabled },
                     set: { launchManager.setLaunchAtLogin(enabled: $0) }
                 ))
 
-                Text("Automatically launch AntiBox companion in the Menu Bar when your Mac boots up.")
+                Text("Automatically launch ZedGravity companion in the Menu Bar when your Mac boots up.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
 
@@ -795,12 +856,97 @@ public struct MainDashboardView: View {
                 Toggle("Show Claude & GPT-OSS Quota", isOn: $viewModel.menuBarShowClaudeGpt)
                 Toggle("Show Gemini Image Generation Quota", isOn: $viewModel.menuBarShowImage)
 
-                Text("Check any combination of quotas to display together on the top macOS Menu Bar.")
+                HStack {
+                    Text("Menu Bar Preview:")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkle")
+                            .font(.system(size: 10))
+                        Text(viewModel.menuBarSummaryText)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(Capsule())
+                }
+            }
+
+            Section("Auto-Switch Zed ACP Account") {
+                Toggle("Enable Auto-Switch on Low Quota", isOn: $viewModel.autoRotateZedACPEnabled)
+
+                if viewModel.autoRotateZedACPEnabled {
+                    Picker("Quota to Monitor", selection: Binding(
+                        get: { viewModel.autoRotateFocus },
+                        set: { viewModel.setAutoRotateFocus($0) }
+                    )) {
+                        ForEach(AutoSwitchQuotaFocus.allCases) { focus in
+                            Text(focus.displayName).tag(focus)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(viewModel.autoRotateFocus.description)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+
+                Text("When the monitored quota reaches critical limit (≤ 5%), ZedGravity rotates Zed to a healthy account and notifies you. Zed chat history is completely preserved.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
 
-            Section("Quota Monitoring & Image Tracking") {
+            Section("Background Sync & Battery Optimization") {
+                Picker("Sync Frequency", selection: Binding(
+                    get: { viewModel.syncFrequency },
+                    set: { viewModel.updateSyncFrequency($0) }
+                )) {
+                    ForEach(SyncFrequency.allCases) { freq in
+                        Text(freq.displayName).tag(freq)
+                    }
+                }
+
+                Text("Background sync refreshes your active account only to minimize network requests and battery consumption. Manual refresh will sync all accounts.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                Button {
+                    Task {
+                        await viewModel.refreshAllQuotas(activeAccountOnly: false)
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Refresh All Accounts Now")
+                    }
+                }
+            }
+
+            Section("Account Import & Local Storage") {
+                Button {
+                    viewModel.importAccountsFromAntigravityTools()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Import Accounts from Antigravity Tools")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+
+                if let msg = viewModel.importStatusMessage {
+                    Text(msg)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.green)
+                }
+
+                Text("Imports existing accounts and tokens directly into macOS Keychain and ZedGravity local storage (~/Library/Application Support/ZedGravity). ZedGravity operates 100% standalone via direct Google Cloud Code API.")
+                    .font(.system(size: 10.5))
+                    .foregroundColor(.secondary)
+            }
+
+            Section("Quota Monitoring & Notifications") {
                 Toggle("Track Gemini Flash Image Generation Quota", isOn: $viewModel.trackImageQuota)
                 Toggle("Notify When Quota Drops Below Safe Threshold", isOn: $viewModel.notifyLowQuota)
 
@@ -812,44 +958,17 @@ public struct MainDashboardView: View {
                         Text("10% Remaining").tag(10.0)
                     }
                 }
-            }
 
-            Section("Data Engine & Independence") {
-                Picker("Engine Mode", selection: $viewModel.engineMode) {
-                    ForEach(DashboardViewModel.EngineMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .foregroundColor(.green)
-                    Text(viewModel.standaloneStatus)
-                        .font(.system(size: 11, weight: .medium))
-                }
-
-                Button("Migrate & Detach from Antigravity Tools") {
-                    viewModel.detachFromAntigravityTools()
-                }
-                .buttonStyle(.borderedProminent)
-
-                Text("Imports existing accounts and tokens directly into macOS Keychain and AntiBox local storage (~/Library/Application Support/AntiBox). After detachment, AntiBox operates completely standalone via direct Google OAuth & Cloud Code APIs without Antigravity Tools.")
-                    .font(.system(size: 10.5))
+                Text("Dispatches native macOS banners with sound when Gemini or Claude quotas fall below your chosen threshold.")
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
-
-                Button("Refresh Live Quotas Now") {
-                    Task {
-                        await viewModel.refreshAllQuotas()
-                    }
-                }
             }
 
-            Section("About AntiBox") {
-                LabeledContent("Version", value: "1.2.0")
-                LabeledContent("Design Language", value: "Native Apple Frosted Vibrancy")
+            Section("About ZedGravity") {
+                LabeledContent("Version", value: "1.2.0 (Open Source Edition)")
+                LabeledContent("Architecture", value: "Native Swift & SwiftUI (100% Standalone)")
                 LabeledContent("Platform", value: "macOS 14+ Sonoma / Sequoia")
-                LabeledContent("Security", value: "Apple Keychain Protected")
+                LabeledContent("Security", value: "Apple Keychain Protected (0600 POSIX)")
             }
         }
         .formStyle(.grouped)

@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.antibox.AntiBox</string>
+    <string>com.naenmad.ZedGravity</string>
     <key>CFBundleName</key>
-    <string>AntiBox</string>
+    <string>ZedGravity</string>
     <key>CFBundleDisplayName</key>
-    <string>AntiBox</string>
+    <string>ZedGravity</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>AntiBox</string>
+    <string>ZedGravity</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
@@ -23,6 +23,6 @@
     <key>LSUIElement</key>
     <false/>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 AntiBox. All rights reserved.</string>
+    <string>Copyright © 2026 naenmad. All rights reserved.</string>
 </dict>
 </plist>

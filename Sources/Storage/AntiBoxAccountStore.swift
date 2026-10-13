@@ -11,14 +11,19 @@ public final class AntiBoxAccountStore: Sendable {
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let antiBoxDir = appSupport.appendingPathComponent("AntiBox", isDirectory: true)
+        let zedDir = appSupport.appendingPathComponent("ZedGravity", isDirectory: true)
+        let oldDir = appSupport.appendingPathComponent("AntiBox", isDirectory: true)
 
-        if !FileManager.default.fileExists(atPath: antiBoxDir.path) {
-            try? FileManager.default.createDirectory(at: antiBoxDir, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: zedDir.path) {
+            try? FileManager.default.createDirectory(at: zedDir, withIntermediateDirectories: true)
+            let oldAccounts = oldDir.appendingPathComponent("accounts.json")
+            if FileManager.default.fileExists(atPath: oldAccounts.path) {
+                try? FileManager.default.copyItem(at: oldAccounts, to: zedDir.appendingPathComponent("accounts.json"))
+            }
         }
 
-        self.appSupportDir = antiBoxDir
-        self.accountsFile = antiBoxDir.appendingPathComponent("accounts.json")
+        self.appSupportDir = zedDir
+        self.accountsFile = zedDir.appendingPathComponent("accounts.json")
     }
 
     public var hasLocalAccounts: Bool {

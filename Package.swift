@@ -2,22 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "AntiBox",
+    name: "ZedGravity",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "AntiBox", targets: ["AntiBox"])
+        .executable(name: "ZedGravity", targets: ["ZedGravity"])
     ],
     dependencies: [],
     targets: [
         .executableTarget(
-            name: "AntiBox",
+            name: "ZedGravity",
             path: "Sources"
         ),
         .testTarget(
-            name: "AntiBoxTests",
-            dependencies: ["AntiBox"],
+            name: "ZedGravityTests",
+            dependencies: ["ZedGravity"],
             path: "Tests"
         )
     ]

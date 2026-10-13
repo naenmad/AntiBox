@@ -11,13 +11,18 @@ public final class KeychainManager: Sendable {
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("AntiBox", isDirectory: true)
+        let zedDir = appSupport.appendingPathComponent("ZedGravity", isDirectory: true)
+        let oldDir = appSupport.appendingPathComponent("AntiBox", isDirectory: true)
 
-        if !FileManager.default.fileExists(atPath: dir.path) {
-            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: zedDir.path) {
+            try? FileManager.default.createDirectory(at: zedDir, withIntermediateDirectories: true)
+            let oldCreds = oldDir.appendingPathComponent("credentials.json")
+            if FileManager.default.fileExists(atPath: oldCreds.path) {
+                try? FileManager.default.copyItem(at: oldCreds, to: zedDir.appendingPathComponent("credentials.json"))
+            }
         }
 
-        self.credentialsFile = dir.appendingPathComponent("credentials.json")
+        self.credentialsFile = zedDir.appendingPathComponent("credentials.json")
     }
 
     public enum KeychainError: LocalizedError {
